@@ -19,6 +19,7 @@ import logging
 import os
 import shlex
 from subprocess import CalledProcessError
+from typing import Dict, List
 
 from snapcraft.internal import common, errors
 
@@ -122,7 +123,17 @@ class BasePlugin:
 
     def build(self):
         """Build the source code retrieved from the pull phase."""
-        pass
+
+        # NOTE: build environment is currently injected by build_env_for_part
+        # which grabs plugin.env().  But we pass along env for testing purposes,
+        # though results in some redundant environment.
+        build_env = self.get_build_environment()
+
+        for command in self.get_build_commands():
+            self.run(command, env=build_env)
+
+    def get_build_commands(self) -> List[List[str]]:
+        return []
 
     def clean_build(self):
         """Clean the artifacts that resulted from building this part."""
@@ -156,7 +167,7 @@ class BasePlugin:
         """
         return []
 
-    def env(self, root):
+    def env(self, root) -> List[str]:
         """Return a list with the execution environment for building.
 
         Plugins often need special environment variables exported to the
@@ -165,7 +176,25 @@ class BasePlugin:
 
         :param str root: The root for the part
         """
-        return []
+
+        build_env = self.get_build_environment()
+
+        # Python 3.6+ dicts are ordered.
+        return [f"{k}={str(v)!r}" for k, v in build_env.items()]
+
+    def get_build_environment(self) -> Dict[str, str]:
+        source_subdir = self.sourcedir
+
+        sub_dir = getattr(self.options, "source_subdir", None)
+        if sub_dir:
+            source_subdir = os.path.join(source_subdir, sub_dir)
+
+        # Specifying SNAPCRAFT_PARALLEL_COUNT as a variable will allow
+        # the user to override count per-part, in case they want j1, etc.
+        return {
+            "SNAPCRAFT_PART_SRC_SUBDIR": source_subdir,
+            "SNAPCRAFT_PARALLEL_COUNT": self.parallel_build_count,
+        }
 
     def enable_cross_compilation(self):
         """Enable cross compilation for the plugin."""
@@ -187,7 +216,7 @@ class BasePlugin:
     def run(self, cmd, cwd=None, **kwargs):
         if not cwd:
             cwd = self.builddir
-        cmd_string = " ".join([shlex.quote(c) for c in cmd])
+        cmd_string = " ".join(cmd)
         print(cmd_string)
         os.makedirs(cwd, exist_ok=True)
         try:

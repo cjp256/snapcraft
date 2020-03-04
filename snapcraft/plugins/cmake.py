@@ -35,7 +35,7 @@ Additionally, this plugin uses the following plugin-specific keywords:
 
 import logging
 import os
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 import snapcraft
 from snapcraft.internal import errors
@@ -103,27 +103,6 @@ class CMakePlugin(snapcraft.BasePlugin):
         if options.make_parameters:
             logger.warning("make-paramaters is deprecated, ignoring.")
 
-    def build(self):
-        source_subdir = getattr(self.options, "source_subdir", None)
-        if source_subdir:
-            sourcedir = os.path.join(self.sourcedir, source_subdir)
-        else:
-            sourcedir = self.sourcedir
-
-        env = self._build_environment()
-        configflags = self._get_processed_flags()
-
-        self.run(["cmake", sourcedir, "-DCMAKE_INSTALL_PREFIX="] + configflags, env=env)
-
-        # TODO: there is a better way to specify the job count on newer versions of cmake
-        # https://github.com/Kitware/CMake/commit/1ab3881ec9e809ac5f6cad5cd84048310b8683e2
-        self.run(
-            ["cmake", "--build", ".", "--", "-j{}".format(self.parallel_build_count)],
-            env=env,
-        )
-
-        self.run(["cmake", "--build", ".", "--target", "install"], env=env)
-
     def _get_processed_flags(self) -> List[str]:
         # Return the original if no build_snaps are in options.
         if not self.options.build_snaps:
@@ -146,17 +125,53 @@ class CMakePlugin(snapcraft.BasePlugin):
 
         return [str(f) for f in flags]
 
-    def _build_environment(self):
-        env = os.environ.copy()
-        env["DESTDIR"] = self.installdir
-        env["CMAKE_PREFIX_PATH"] = "$CMAKE_PREFIX_PATH:{}".format(
-            self.project.stage_dir
+    def get_build_environment(self) -> Dict[str, str]:
+        env = super().get_build_environment()
+
+        env.update(
+            {
+                "CMAKE_INCLUDE_PATH": ":".join(
+                    [
+                        "$CMAKE_INCLUDE_PATH",
+                        "$SNAPCRAFT_STAGE/include",
+                        "$SNAPCRAFT_STAGE/usr/include",
+                        "$SNAPCRAFT_STAGE/include/$SNAPCRAFT_ARCH_TRIPLET",
+                        "$SNAPCRAFT_STAGE/usr/include/$SNAPCRAFT_ARCH_TRIPLET",
+                    ]
+                ),
+                "CMAKE_LIBRARY_PATH": ":".join(
+                    [
+                        "$CMAKE_LIBRARY_PATH",
+                        "$SNAPCRAFT_STAGE/qlib",
+                        "$SNAPCRAFT_STAGE/usr/lib",
+                        "$SNAPCRAFT_STAGE/lib/$SNAPCRAFT_ARCH_TRIPLET",
+                        "$SNAPCRAFT_STAGE/usr/lib/$SNAPCRAFT_ARCH_TRIPLET",
+                    ]
+                ),
+                "CMAKE_PREFIX_PATH": "$CMAKE_PREFIX_PATH:$SNAPCRAFT_STAGE",
+                "SNAPCRAFT_CMAKE_FLAGS": " ".join(self._get_processed_flags()),
+            }
         )
-        env["CMAKE_INCLUDE_PATH"] = "$CMAKE_INCLUDE_PATH:" + ":".join(
-            ["{0}/include", "{0}/usr/include", "{0}/include/{1}", "{0}/usr/include/{1}"]
-        ).format(self.project.stage_dir, self.project.arch_triplet)
-        env["CMAKE_LIBRARY_PATH"] = "$CMAKE_LIBRARY_PATH:" + ":".join(
-            ["{0}/lib", "{0}/usr/lib", "{0}/lib/{1}", "{0}/usr/lib/{1}"]
-        ).format(self.project.stage_dir, self.project.arch_triplet)
 
         return env
+
+    def get_build_commands(self) -> List[List[str]]:
+        return [
+            [
+                "cmake",
+                "$SNAPCRAFT_PART_SRC_SUBDIR",
+                "-DCMAKE_INSTALL_PREFIX=",
+                "$SNAPCRAFT_CMAKE_FLAGS",
+            ],
+            ["cmake", "--build", ".", "--", "-j$SNAPCRAFT_PARALLEL_COUNT"],
+            [
+                "env",
+                "-",
+                "DESTDIR=$SNAPCRAFT_PART_INSTALL/",
+                "cmake",
+                "--build",
+                ".",
+                "--target",
+                "install",
+            ],
+        ]

@@ -130,14 +130,38 @@ class CMakeTest(CMakeBaseTest):
         os.makedirs(plugin.builddir)
         plugin.build()
 
-        self.run_mock.assert_has_calls(
-            [
-                mock.call(
-                    ["cmake", "--build", ".", "--", "-j1"],
-                    cwd=plugin.builddir,
-                    env=mock.ANY,
-                )
-            ]
+        self.assertThat(
+            self.run_mock.mock_calls,
+            Equals(
+                [
+                    mock.call(
+                        [
+                            "cmake",
+                            "$SNAPCRAFT_PART_SRC_SUBDIR",
+                            "-DCMAKE_INSTALL_PREFIX=",
+                            "$SNAPCRAFT_CMAKE_FLAGS",
+                        ],
+                        cwd=f"{self.path}/parts/test-part/build",
+                    ),
+                    mock.call(
+                        ["cmake", "--build", ".", "--", "-j$SNAPCRAFT_PARALLEL_COUNT"],
+                        cwd=f"{self.path}/parts/test-part/build",
+                    ),
+                    mock.call(
+                        [
+                            "env",
+                            "-",
+                            "DESTDIR=$SNAPCRAFT_PART_INSTALL/",
+                            "cmake",
+                            "--build",
+                            ".",
+                            "--target",
+                            "install",
+                        ],
+                        cwd=f"{self.path}/parts/test-part/build",
+                    ),
+                ]
+            ),
         )
 
     def test_build_environment(self):
@@ -145,33 +169,20 @@ class CMakeTest(CMakeBaseTest):
         os.makedirs(plugin.builddir)
         plugin.build()
 
-        expected = {}
-
-        expected["DESTDIR"] = plugin.installdir
-        expected["CMAKE_PREFIX_PATH"] = "$CMAKE_PREFIX_PATH:{}".format(self.stage_dir)
-        expected["CMAKE_INCLUDE_PATH"] = "$CMAKE_INCLUDE_PATH:" + ":".join(
-            ["{0}/include", "{0}/usr/include", "{0}/include/{1}", "{0}/usr/include/{1}"]
-        ).format(self.stage_dir, plugin.project.arch_triplet)
-        expected["CMAKE_LIBRARY_PATH"] = "$CMAKE_LIBRARY_PATH:" + ":".join(
-            ["{0}/lib", "{0}/usr/lib", "{0}/lib/{1}", "{0}/usr/lib/{1}"]
-        ).format(self.stage_dir, plugin.project.arch_triplet)
-
         self.assertThat(self.run_mock.call_count, Equals(3))
         for call_args in self.run_mock.call_args_list:
             environment = call_args[1]["env"]
-            for variable, value in expected.items():
-                self.assertTrue(
-                    variable in environment,
-                    'Expected variable "{}" to be in environment'.format(variable),
-                )
-
-                self.assertThat(
-                    environment[variable],
-                    Equals(value),
-                    "Expected ${}={}, but it was {}".format(
-                        variable, value, environment[variable]
-                    ),
-                )
+            self.assertThat(
+                environment,
+                Equals(
+                    {
+                        "CMAKE_INCLUDE_PATH": "$CMAKE_INCLUDE_PATH:$SNAPCRAFT_STAGE_DIR/include:$SNAPCRAFT_STAGE_DIR/usr/include:$SNAPCRAFT_STAGE_DIR/include/$SNAPCRAFT_ARCH_TRIPLET:$SNAPCRAFT_STAGE_DIR/usr/include/$SNAPCRAFT_ARCH_TRIPLET",
+                        "CMAKE_LIBRARY_PATH": "$CMAKE_LIBRARY_PATH:$SNAPCRAFT_STAGE_DIR/lib:$SNAPCRAFT_STAGE_DIR/usr/lib:$SNAPCRAFT_STAGE_DIR/lib/$SNAPCRAFT_ARCH_TRIPLET:$SNAPCRAFT_STAGE_DIR/usr/lib/$SNAPCRAFT_ARCH_TRIPLET",
+                        "CMAKE_PREFIX_PATH": "$CMAKE_PREFIX_PATH:$SNAPCRAFT_STAGE_DIR",
+                        "DESTDIR": "$SNAPCRAFT_PART_INSTALL",
+                    }
+                ),
+            )
 
     def test_unsupported_base(self):
         project = snapcraft.project.Project(
@@ -257,25 +268,62 @@ class CMakeBuildTest(CMakeBaseTest):
         os.makedirs(plugin.builddir)
         plugin.build()
 
-        self.run_mock.assert_has_calls(
-            [
-                mock.call(
-                    ["cmake", plugin.sourcedir, "-DCMAKE_INSTALL_PREFIX="]
-                    + self.expected_configflags,
-                    cwd=plugin.builddir,
-                    env=mock.ANY,
-                ),
-                mock.call(
-                    ["cmake", "--build", ".", "--", "-j2"],
-                    cwd=plugin.builddir,
-                    env=mock.ANY,
-                ),
-                mock.call(
-                    ["cmake", "--build", ".", "--target", "install"],
-                    cwd=plugin.builddir,
-                    env=mock.ANY,
-                ),
-            ]
+        self.assertThat(
+            self.run_mock.mock_calls,
+            Equals(
+                [
+                    mock.call(
+                        [
+                            "cmake",
+                            "$SNAPCRAFT_PART_SRC_SUBDIR",
+                            "-DCMAKE_INSTALL_PREFIX=",
+                            "$SNAPCRAFT_CMAKE_FLAGS",
+                        ],
+                        cwd=f"{self.path}/parts/test-part/build",
+                        env={
+                            "SNAPCRAFT_PART_SRC_SUBDIR": f"{self.path}/parts/test-part/src",
+                            "SNAPCRAFT_PARALLEL_COUNT": 2,
+                            "CMAKE_INCLUDE_PATH": "$CMAKE_INCLUDE_PATH:$SNAPCRAFT_STAGE_DIR/include:$SNAPCRAFT_STAGE_DIR/usr/include:$SNAPCRAFT_STAGE_DIR/include/$SNAPCRAFT_ARCH_TRIPLET:$SNAPCRAFT_STAGE_DIR/usr/include/$SNAPCRAFT_ARCH_TRIPLET",
+                            "CMAKE_LIBRARY_PATH": "$CMAKE_LIBRARY_PATH:$SNAPCRAFT_STAGE_DIR/lib:$SNAPCRAFT_STAGE_DIR/usr/lib:$SNAPCRAFT_STAGE_DIR/lib/$SNAPCRAFT_ARCH_TRIPLET:$SNAPCRAFT_STAGE_DIR/usr/lib/$SNAPCRAFT_ARCH_TRIPLET",
+                            "CMAKE_PREFIX_PATH": "$CMAKE_PREFIX_PATH:$SNAPCRAFT_STAGE_DIR",
+                            "SNAPCRAFT_CMAKE_FLAGS": "-DCMAKE_FIND_ROOT_PATH=/snap/gnome-sdk/current;/snap/kde-plasma-sdk/current",
+                        },
+                    ),
+                    mock.call(
+                        ["cmake", "--build", ".", "--", "-j$SNAPCRAFT_PARALLEL_COUNT"],
+                        cwd=f"{self.path}/parts/test-part/build",
+                        env={
+                            "SNAPCRAFT_PART_SRC_SUBDIR": f"{self.path}/parts/test-part/src",
+                            "SNAPCRAFT_PARALLEL_COUNT": 2,
+                            "CMAKE_INCLUDE_PATH": "$CMAKE_INCLUDE_PATH:$SNAPCRAFT_STAGE_DIR/include:$SNAPCRAFT_STAGE_DIR/usr/include:$SNAPCRAFT_STAGE_DIR/include/$SNAPCRAFT_ARCH_TRIPLET:$SNAPCRAFT_STAGE_DIR/usr/include/$SNAPCRAFT_ARCH_TRIPLET",
+                            "CMAKE_LIBRARY_PATH": "$CMAKE_LIBRARY_PATH:$SNAPCRAFT_STAGE_DIR/lib:$SNAPCRAFT_STAGE_DIR/usr/lib:$SNAPCRAFT_STAGE_DIR/lib/$SNAPCRAFT_ARCH_TRIPLET:$SNAPCRAFT_STAGE_DIR/usr/lib/$SNAPCRAFT_ARCH_TRIPLET",
+                            "CMAKE_PREFIX_PATH": "$CMAKE_PREFIX_PATH:$SNAPCRAFT_STAGE_DIR",
+                            "SNAPCRAFT_CMAKE_FLAGS": "-DCMAKE_FIND_ROOT_PATH=/snap/gnome-sdk/current;/snap/kde-plasma-sdk/current",
+                        },
+                    ),
+                    mock.call(
+                        [
+                            "env",
+                            "-",
+                            "DESTDIR=$SNAPCRAFT_PART_INSTALL/",
+                            "cmake",
+                            "--build",
+                            ".",
+                            "--target",
+                            "install",
+                        ],
+                        cwd=f"{self.path}/parts/test-part/build",
+                        env={
+                            "SNAPCRAFT_PART_SRC_SUBDIR": f"{self.path}/parts/test-part/src",
+                            "SNAPCRAFT_PARALLEL_COUNT": 2,
+                            "CMAKE_INCLUDE_PATH": "$CMAKE_INCLUDE_PATH:$SNAPCRAFT_STAGE_DIR/include:$SNAPCRAFT_STAGE_DIR/usr/include:$SNAPCRAFT_STAGE_DIR/include/$SNAPCRAFT_ARCH_TRIPLET:$SNAPCRAFT_STAGE_DIR/usr/include/$SNAPCRAFT_ARCH_TRIPLET",
+                            "CMAKE_LIBRARY_PATH": "$CMAKE_LIBRARY_PATH:$SNAPCRAFT_STAGE_DIR/lib:$SNAPCRAFT_STAGE_DIR/usr/lib:$SNAPCRAFT_STAGE_DIR/lib/$SNAPCRAFT_ARCH_TRIPLET:$SNAPCRAFT_STAGE_DIR/usr/lib/$SNAPCRAFT_ARCH_TRIPLET",
+                            "CMAKE_PREFIX_PATH": "$CMAKE_PREFIX_PATH:$SNAPCRAFT_STAGE_DIR",
+                            "SNAPCRAFT_CMAKE_FLAGS": "-DCMAKE_FIND_ROOT_PATH=/snap/gnome-sdk/current;/snap/kde-plasma-sdk/current",
+                        },
+                    ),
+                ]
+            ),
         )
 
 

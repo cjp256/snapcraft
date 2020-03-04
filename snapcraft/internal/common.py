@@ -101,7 +101,7 @@ def _run(cmd: List[str], runner: Callable, **kwargs):
     # Finally, execute desired command.
     lines.append("#############################")
     lines.append("# Execute command:")
-    cmd_string = " ".join([shlex.quote(c) for c in cmd])
+    cmd_string = " ".join(cmd)
     lines.append(f"exec {cmd_string}")
 
     # Save script executed by snapcraft.
@@ -117,7 +117,7 @@ def _run(cmd: List[str], runner: Callable, **kwargs):
     script_path.chmod(0o755)
 
     runner_command = ["/bin/sh", str(script_path)]
-    runner_command_string = " ".join([shlex.quote(c) for c in runner_command])
+    runner_command_string = " ".join(runner_command)
     try:
         logger.debug(f"Executing assembled script: {runner_command_string!r}")
         return runner(runner_command, **kwargs)
