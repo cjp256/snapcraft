@@ -155,23 +155,9 @@ class CMakePlugin(snapcraft.BasePlugin):
 
         return env
 
-    def get_build_commands(self) -> List[List[str]]:
+    def get_build_commands(self) -> List[str]:
         return [
-            [
-                "cmake",
-                "$SNAPCRAFT_PART_SRC_SUBDIR",
-                "-DCMAKE_INSTALL_PREFIX=",
-                "$SNAPCRAFT_CMAKE_FLAGS",
-            ],
-            ["cmake", "--build", ".", "--", "-j$SNAPCRAFT_PARALLEL_COUNT"],
-            [
-                "env",
-                "-",
-                "DESTDIR=$SNAPCRAFT_PART_INSTALL/",
-                "cmake",
-                "--build",
-                ".",
-                "--target",
-                "install",
-            ],
+            "cmake $SNAPCRAFT_PART_SRC_SUBDIR -DCMAKE_INSTALL_PREFIX= $SNAPCRAFT_CMAKE_FLAGS",
+            "cmake --build . -- -j$SNAPCRAFT_PARALLEL_COUNT",
+            "DESTDIR=$SNAPCRAFT_PART_INSTALL/ cmake --build . --target install",
         ]

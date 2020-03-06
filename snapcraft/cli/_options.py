@@ -118,7 +118,7 @@ _PROVIDER_OPTIONS = [
         param_decls="--experimental-package-management",
         is_flag=True,
         help="*EXPERIMENTAL* Enables 'package-management' configuration.",
-        envvar="SNAPCRAFT_EXPERIMENTAL_PACKAGE_MANAGEMENT",        
+        envvar="SNAPCRAFT_EXPERIMENTAL_PACKAGE_MANAGEMENT",
         supported_providers=["host", "lxd", "managed-host", "multipass"],
     ),
 ]

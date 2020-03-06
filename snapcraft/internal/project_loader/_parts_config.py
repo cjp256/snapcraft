@@ -22,6 +22,8 @@ from typing import Set  # noqa: F401
 
 import snapcraft
 from snapcraft.internal import elf, pluginhandler, repo
+from snapcraft.internal.meta.package_management import PackageManagement
+from snapcraft.internal.repo.package_management import configure_package_manager
 from ._env import (
     build_env,
     build_env_for_stage,
@@ -191,13 +193,12 @@ class PartsConfig:
             "properties {!r}.".format(part_name, plugin_name, part_properties)
         )
 
-        sources = getattr(plugin, "PLUGIN_STAGE_SOURCES", None)
-        keyrings = getattr(plugin, "PLUGIN_STAGE_KEYRINGS", None)
+        pm = getattr(plugin, "PLUGIN_STAGE_SOURCES", None)
+        if pm is not None:
+            configure_package_manager(pm)
+
         stage_packages_repo = repo.Repo(
-            plugin.osrepodir,
-            sources=sources,
-            keyrings=keyrings,
-            project_options=self._project,
+            plugin.osrepodir, sources=None, keyrings=None, project_options=self._project
         )
 
         grammar_processor = grammar_processing.PartGrammarProcessor(

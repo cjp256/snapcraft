@@ -271,10 +271,6 @@ class CatkinPlugin(snapcraft.BasePlugin):
             )
         )
 
-    @property
-    def PLUGIN_STAGE_KEYRINGS(self):
-        return [_ROS_KEYRING_PATH]
-
     def __init__(self, name, options, project):
         super().__init__(name, options, project)
 
@@ -406,11 +402,7 @@ class CatkinPlugin(snapcraft.BasePlugin):
         # with the pull.
         if self.options.rosinstall_files or self.options.recursive_rosinstall:
             wstool = _ros.wstool.Wstool(
-                self._ros_package_path,
-                self._wstool_path,
-                self.PLUGIN_STAGE_SOURCES,
-                self.PLUGIN_STAGE_KEYRINGS,
-                self.project,
+                self._ros_package_path, self._wstool_path, self.project
             )
             wstool.setup()
 
@@ -469,12 +461,7 @@ class CatkinPlugin(snapcraft.BasePlugin):
 
         # Use catkin_find to discover dependencies already in the underlay
         catkin = _Catkin(
-            self._rosdistro,
-            dependency_workspaces,
-            self._catkin_path,
-            self.PLUGIN_STAGE_SOURCES,
-            self.PLUGIN_STAGE_KEYRINGS,
-            self.project,
+            self._rosdistro, dependency_workspaces, self._catkin_path, self.project
         )
         catkin.setup()
 
@@ -486,8 +473,6 @@ class CatkinPlugin(snapcraft.BasePlugin):
             ubuntu_distro=_BASE_TO_UBUNTU_RELEASE_MAP[
                 self.project.info.get_build_base()
             ],
-            ubuntu_sources=self.PLUGIN_STAGE_SOURCES,
-            ubuntu_keyrings=self.PLUGIN_STAGE_KEYRINGS,
             project=self.project,
         )
         rosdep.setup()
@@ -524,12 +509,7 @@ class CatkinPlugin(snapcraft.BasePlugin):
             os.makedirs(ubuntudir, exist_ok=True)
 
             logger.info("Preparing to fetch apt dependencies...")
-            ubuntu = repo.Ubuntu(
-                ubuntudir,
-                sources=self.PLUGIN_STAGE_SOURCES,
-                keyrings=self.PLUGIN_STAGE_KEYRINGS,
-                project_options=self.project,
-            )
+            ubuntu = repo.Ubuntu(ubuntudir, project_options=self.project)
 
             logger.info("Fetching apt dependencies...")
             try:

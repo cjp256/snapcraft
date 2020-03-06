@@ -22,7 +22,7 @@ from subprocess import CalledProcessError
 from typing import Dict, List
 
 from snapcraft.internal import common, errors
-
+from snapcraft.internal.meta.package_management import PackageManagement
 
 logger = logging.getLogger(__name__)
 
@@ -54,14 +54,9 @@ class BasePlugin:
         return []
 
     @property
-    def PLUGIN_STAGE_SOURCES(self):
+    def PLUGIN_STAGE_SOURCES(self) -> PackageManagement:
         """Define alternative sources.list."""
-        return getattr(self, "_PLUGIN_STAGE_SOURCES", [])
-
-    @property
-    def PLUGIN_STAGE_KEYRINGS(self):
-        """Define additional keyrings to trust for stage-packages."""
-        return getattr(self, "_PLUGIN_STAGE_KEYRINGS", [])
+        return getattr(self, "_PLUGIN_STAGE_SOURCES", PackageManagement())
 
     @property
     def stage_packages(self):
@@ -129,10 +124,16 @@ class BasePlugin:
         # though results in some redundant environment.
         build_env = self.get_build_environment()
 
-        for command in self.get_build_commands():
-            self.run(command, env=build_env)
+        script = "\n".join(self.get_build_commands())
+        with open("/tmp/snapcraft-run.sh", "w") as f:
+            for k, v in build_env.items():
+                f.write(f'export {k}="{str(v)}"\n')
 
-    def get_build_commands(self) -> List[List[str]]:
+            f.write(script)
+
+        self.run(["bash", "-x", "/tmp/snapcraft-run.sh"])
+
+    def get_build_commands(self) -> List[str]:
         return []
 
     def clean_build(self):

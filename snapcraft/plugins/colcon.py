@@ -63,12 +63,14 @@ import logging
 import re
 import shutil
 import textwrap
+from typing import Dict, List
 
 import snapcraft
 from snapcraft.plugins import _ros
 from snapcraft.plugins import _python
 from snapcraft import file_utils, repo
 from snapcraft.internal import errors, mangling
+from snapcraft.internal.meta.package_management import PackageManagement, Repository
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +95,39 @@ _BASE_TO_UBUNTU_RELEASE_MAP = {"core18": "bionic"}
 _SUPPORTED_DEPENDENCY_TYPES = {"apt", "pip"}
 
 _ROS_KEYRING_PATH = os.path.join(snapcraft.internal.common.get_keyringsdir(), "ros.gpg")
+
+_ROS2_KEY = """
+-----BEGIN PGP PUBLIC KEY BLOCK-----
+Version: GnuPG v1
+
+mQINBFzvJpYBEADY8l1YvO7iYW5gUESyzsTGnMvVUmlV3XarBaJz9bGRmgPXh7jc
+VFrQhE0L/HV7LOfoLI9H2GWYyHBqN5ERBlcA8XxG3ZvX7t9nAZPQT2Xxe3GT3tro
+u5oCR+SyHN9xPnUwDuqUSvJ2eqMYb9B/Hph3OmtjG30jSNq9kOF5bBTk1hOTGPH4
+K/AY0jzT6OpHfXU6ytlFsI47ZKsnTUhipGsKucQ1CXlyirndZ3V3k70YaooZ55rG
+aIoAWlx2H0J7sAHmqS29N9jV9mo135d+d+TdLBXI0PXtiHzE9IPaX+ctdSUrPnp+
+TwR99lxglpIG6hLuvOMAaxiqFBB/Jf3XJ8OBakfS6nHrWH2WqQxRbiITl0irkQoz
+pwNEF2Bv0+Jvs1UFEdVGz5a8xexQHst/RmKrtHLct3iOCvBNqoAQRbvWvBhPjO/p
+V5cYeUljZ5wpHyFkaEViClaVWqa6PIsyLqmyjsruPCWlURLsQoQxABcL8bwxX7UT
+hM6CtH6tGlYZ85RIzRifIm2oudzV5l+8oRgFr9yVcwyOFT6JCioqkwldW52P1pk/
+/SnuexC6LYqqDuHUs5NnokzzpfS6QaWfTY5P5tz4KHJfsjDIktly3mKVfY0fSPVV
+okdGpcUzvz2hq1fqjxB6MlB/1vtk0bImfcsoxBmF7H+4E9ZN1sX/tSb0KQARAQAB
+tCZPcGVuIFJvYm90aWNzIDxpbmZvQG9zcmZvdW5kYXRpb24ub3JnPokCVAQTAQoA
+PhYhBMHPbjHmut6IaLFytPQu1vurF8ZUBQJc7yaWAhsDBQkDwmcABQsJCAcCBhUK
+CQgLAgQWAgMBAh4BAheAAAoJEPQu1vurF8ZUkhIP/RbZY1ErvCEUy8iLJm9aSpLQ
+nDZl5xILOxyZlzpg+Ml5bb0EkQDr92foCgcvLeANKARNCaGLyNIWkuyDovPV0xZJ
+rEy0kgBrDNb3++NmdI/+GA92pkedMXXioQvqdsxUagXAIB/sNGByJEhs37F05AnF
+vZbjUhceq3xTlvAMcrBWrgB4NwBivZY6IgLvl/CRQpVYwANShIQdbvHvZSxRonWh
+NXr6v/Wcf8rsp7g2VqJ2N2AcWT84aa9BLQ3Oe/SgrNx4QEhA1y7rc3oaqPVu5ZXO
+K+4O14JrpbEZ3Xs9YEjrcOuEDEpYktA8qqUDTdFyZrxb9S6BquUKrA6jZgT913kj
+J4e7YAZobC4rH0w4u0PrqDgYOkXA9Mo7L601/7ZaDJob80UcK+Z12ZSw73IgBix6
+DiJVfXuWkk5PM2zsFn6UOQXUNlZlDAOj5NC01V0fJ8P0v6GO9YOSSQx0j5UtkUbR
+fp/4W7uCPFvwAatWEHJhlM3sQNiMNStJFegr56xQu1a/cbJH7GdbseMhG/f0BaKQ
+qXCI3ffB5y5AOLc9Hw7PYiTFQsuY1ePRhE+J9mejgWRZxkjAH/FlAubqXkDgterC
+h+sLkzGf+my2IbsMCuc+3aeNMJ5Ej/vlXefCH/MpPWAHCqpQhe2DET/jRSaM53US
+AHNx8kw4MPUkxExgI7Sd
+=4Ofr
+-----END PGP PUBLIC KEY BLOCK-----
+"""
 
 
 class ColconInvalidSystemDependencyError(errors.SnapcraftError):
@@ -224,43 +259,12 @@ class ColconPlugin(snapcraft.BasePlugin):
         ]
 
     @property
-    def _pip(self):
-        if not self.__pip:
-            self.__pip = _python.Pip(
-                python_major_version="3",  # ROS2 uses python3
-                part_dir=self.partdir,
-                install_dir=self.installdir,
-                stage_dir=self.project.stage_dir,
-            )
+    def PLUGIN_STAGE_SOURCES(self) -> PackageManagement:
+        codename = _BASE_TO_UBUNTU_RELEASE_MAP[self.project.info.get_build_base()]
+        source = f"deb http://repo.ros2.org/ubuntu/main {codename} main"
 
-        return self.__pip
-
-    @property
-    def PLUGIN_STAGE_SOURCES(self):
-        ros_repo = "http://repo.ros2.org/ubuntu/main"
-        ubuntu_repo = "http://${prefix}.ubuntu.com/${suffix}/"
-        security_repo = "http://${security}.ubuntu.com/${suffix}/"
-
-        return textwrap.dedent(
-            """
-            deb {ros_repo} {codename} main
-            deb {ubuntu_repo} {codename} main universe
-            deb {ubuntu_repo} {codename}-updates main universe
-            deb {ubuntu_repo} {codename}-security main universe
-            deb {security_repo} {codename}-security main universe
-            """.format(
-                ros_repo=ros_repo,
-                ubuntu_repo=ubuntu_repo,
-                security_repo=security_repo,
-                codename=_BASE_TO_UBUNTU_RELEASE_MAP[
-                    self.project.info.get_build_base()
-                ],
-            )
-        )
-
-    @property
-    def PLUGIN_STAGE_KEYRINGS(self):
-        return [_ROS_KEYRING_PATH]
+        repo = Repository(source=source, gpg_public_key=_ROS2_KEY)
+        return PackageManagement(repositories=[repo])
 
     def __init__(self, name, options, project):
         super().__init__(name, options, project)
@@ -285,20 +289,17 @@ class ColconPlugin(snapcraft.BasePlugin):
             "own risk."
         )
 
-        self.__pip = None
-        self._rosdep_path = os.path.join(self.partdir, "rosdep")
-        self._ros_underlay = os.path.join(
-            self.installdir, "opt", "ros", self._rosdistro
-        )
-
-        # Colcon packages cannot be installed into the same workspace as upstream ROS
-        # components, which are Ament. We need to install them alongside and chain the
-        # workspaces (upstream is the underlay, stuff we're building here is the
-        # overlay).
-        self._ros_overlay = os.path.join(self.installdir, "opt", "ros", "snap")
-
         # Always fetch colcon in order to build the workspace
         self.stage_packages.append("python3-colcon-common-extensions")
+        self.build_packages.extend(
+            [
+                "python3-colcon-common-extensions",
+                "python3-rosdep",
+                "python3-wstool",
+                "python3-rosinstall",
+                f"ros-{self._rosdistro}-ros-base",
+            ]
+        )
 
         # Get a unique set of packages
         self._packages = None
@@ -326,17 +327,46 @@ class ColconPlugin(snapcraft.BasePlugin):
         if os.path.abspath(self.sourcedir) == os.path.abspath(self._ros_package_path):
             raise ColconWorkspaceIsRootError()
 
+    def get_build_environment(self) -> Dict[str, str]:
+        env = super().get_build_environment()
+
+        env.update(
+            {
+                "AMENT_PYTHON_EXECUTABLE": "/usr/bin/python3",
+                "COLCON_PYTHON_EXECUTABLE": "/usr/bin/python3",
+                "SNAP_COLCON_ROOT": "/",
+                "ROS_DISTRO": self._rosdistro,
+                "ROS_PACKAGE_PATH": self.builddir,
+                "ROS_PYTHON_VERSION": "3",
+                "SNAPCRAFT_COLCON_CMAKE_ARGS": "--cmake-args -DCMAKE_BUILD_TYPE=release",  # --cmake-args <...>
+                "SNAPCRAFT_COLCON_AMENT_ARGS": "",  # --ament-cmake-args <...>
+                "SNAPCRAFT_COLCON_CATKIN_ARGS": "",  # --catkin-cmake-args <...>
+                "SNAPCRAFT_COLCON_PACKAGES_IGNORE_ARGS": "",  # --packages-ignore <...>
+                "SNAPCRAFT_COLCON_PACKAGES_SELECT_ARGS": "",  # --packages-select <...>
+                "SNAPCRAFT_COLCON_BUILD_BASE": self.builddir,
+                "SNAPCRAFT_COLCON_BASE_PATHS": "$SNAPCRAFT_PART_SRC_SUBDIR",
+                "SNAPCRAFT_COLCON_INSTALL_BASE": "$SNAPCRAFT_PART_INSTALL/opt/ros/snap",
+            }
+        )
+
+        return env
+
+    def get_build_commands(self) -> List[str]:
+        return [
+            "source /opt/ros/$ROS_DISTRO/setup.bash",
+            "if [ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]; then sudo rosdep init; fi",
+            "rosdep update",
+            "rosdep install --from-paths $SNAPCRAFT_COLCON_BASE_PATHS -y -r",
+            "colcon build --merge-install --build-base $SNAPCRAFT_COLCON_BUILD_BASE --base-paths $SNAPCRAFT_COLCON_BASE_PATHS --install-base $SNAPCRAFT_COLCON_INSTALL_BASE --parallel-workers=$SNAPCRAFT_PARALLEL_BUILD_COUNT $SNAPCRAFT_ROS_CMAKE_ARGS $SNAPCRAFT_ROS_AMENT_ARGS $SNAPCRAFT_ROS_CATKIN_CMAKE_ARGS $SNAPCRAFT_ROS_PACKAGES_IGNORE_ARGS $SNAPCRAFT_ROS_PACKAGES_SELECT_ARGS",
+        ]
+
     def env(self, root):
         """Runtime environment for ROS binaries and services."""
 
         env = [
-            'AMENT_PYTHON_EXECUTABLE="{}"'.format(
-                os.path.join(root, "usr", "bin", "python3")
-            ),
-            'COLCON_PYTHON_EXECUTABLE="{}"'.format(
-                os.path.join(root, "usr", "bin", "python3")
-            ),
-            'SNAP_COLCON_ROOT="{}"'.format(root),
+            f'AMENT_PYTHON_EXECUTABLE="{root}/usr/bin/python3"',
+            f'COLCON_PYTHON_EXECUTABLE="{root}/usr/bin/python3"',
+            f'SNAP_COLCON_ROOT="{root}"',
         ]
 
         # Each of these lines is prepended with an `export` when the environment is
@@ -344,116 +374,10 @@ class ColconPlugin(snapcraft.BasePlugin):
         # by appending it on the end of an item already in the environment.
         # FIXME: There should be a better way to do this. LP: #1792034
         env[-1] = env[-1] + "\n\n" + self._source_setup_sh(root)
-
         return env
 
-    def pull(self):
-        """Copy source into build directory and fetch dependencies.
-
-        Colcon packages can specify their system dependencies in their
-        package.xml. In order to support that, the Colcon packages are
-        interrogated for their dependencies here. Since `stage-packages` are
-        already installed by the time this function is run, the dependencies
-        from the package.xml are pulled down explicitly.
-        """
-
-        super().pull()
-
-        # Make sure the package path exists before continuing. We only care about doing
-        # this if there are actually packages to build, which is indicated both by
-        # self._packages being None as well as a non-empty list.
-        packages_to_build = self._packages is None or len(self._packages) > 0
-        if packages_to_build and not os.path.exists(self._ros_package_path):
-            raise ColconPackagePathNotFoundError(self._ros_package_path)
-
-        # Use rosdep for dependency detection and resolution
-        rosdep = _ros.rosdep.Rosdep(
-            ros_distro=self._rosdistro,
-            ros_package_path=self._ros_package_path,
-            rosdep_path=self._rosdep_path,
-            ubuntu_distro=_BASE_TO_UBUNTU_RELEASE_MAP[
-                self.project.info.get_build_base()
-            ],
-            ubuntu_sources=self.PLUGIN_STAGE_SOURCES,
-            ubuntu_keyrings=self.PLUGIN_STAGE_KEYRINGS,
-            project=self.project,
-        )
-        rosdep.setup()
-
-        self._setup_dependencies(rosdep)
-
-    def _setup_dependencies(self, rosdep):
-        # Parse the Colcon packages to pull out their system dependencies
-        system_dependencies = _find_system_dependencies(self._packages, rosdep)
-
-        # Pull down and install any apt dependencies that were discovered
-        self._setup_apt_dependencies(system_dependencies.get("apt"))
-
-        # Pull down and install any pip dependencies that were discovered
-        self._setup_pip_dependencies(system_dependencies.get("pip"))
-
-    def _setup_apt_dependencies(self, apt_dependencies):
-        if apt_dependencies:
-            ubuntudir = os.path.join(self.partdir, "ubuntu")
-            os.makedirs(ubuntudir, exist_ok=True)
-
-            logger.info("Preparing to fetch apt dependencies...")
-            ubuntu = repo.Ubuntu(
-                ubuntudir,
-                sources=self.PLUGIN_STAGE_SOURCES,
-                keyrings=self.PLUGIN_STAGE_KEYRINGS,
-                project_options=self.project,
-            )
-
-            logger.info("Fetching apt dependencies...")
-            try:
-                ubuntu.get(apt_dependencies)
-            except repo.errors.PackageNotFoundError as e:
-                raise ColconAptDependencyFetchError(e.message)
-
-            logger.info("Installing apt dependencies...")
-            ubuntu.unpack(self.installdir)
-
-    def _setup_pip_dependencies(self, pip_dependencies):
-        if pip_dependencies:
-            self._pip.setup()
-
-            logger.info("Fetching pip dependencies...")
-            self._pip.download(pip_dependencies)
-
-            logger.info("Installing pip dependencies...")
-            self._pip.install(pip_dependencies)
-
-    def clean_pull(self):
-        super().clean_pull()
-
-        # Remove the rosdep path, if any
-        with contextlib.suppress(FileNotFoundError):
-            shutil.rmtree(self._rosdep_path)
-
-        # Clean pip packages, if any
-        self._pip.clean_packages()
-
     def _source_setup_sh(self, root):
-        underlaydir = os.path.join(root, "opt", "ros", self._rosdistro)
-        overlaydir = os.path.join(root, "opt", "ros", "snap")
-
-        source_script = textwrap.dedent(
-            """
-            # First, source the upstream ROS underlay
-            if [ -f "{underlay_setup}" ]; then
-                . "{underlay_setup}"
-            fi
-
-            # Then source the overlay
-            if [ -f "{overlay_setup}" ]; then
-                . "{overlay_setup}"
-            fi
-        """
-        ).format(
-            underlay_setup=os.path.join(underlaydir, "setup.sh"),
-            overlay_setup=os.path.join(overlaydir, "setup.sh"),
-        )
+        # TODO: install this as file
 
         # We need to source ROS's setup.sh at this point. However, it accepts
         # arguments (thus will parse $@), and we really don't want it to, since
@@ -475,282 +399,24 @@ class ColconPlugin(snapcraft.BasePlugin):
 
             BACKUP_ARGS=$(quote "$@")
             set --
-            {}
+
+            # First, source the upstream ROS underlay
+            if [ -f "/opt/ros/{ros_distro}/setup.sh" ]; then
+                . "/opt/ros/{ros_distro}/setup.sh"
+            fi
+
+            # Then source the overlay
+            if [ -f "/opt/ros/snap/setup.sh" ]; then
+                . "/opt/ros/snap/setup.sh"
+            fi
+
             eval "set -- $BACKUP_ARGS"
-        """  # noqa: W605
-        ).format(
-            source_script
-        )  # noqa
+        """.format(
+                ros_distro=self._rosdistro
+            )
+        )
 
     def build(self):
-        """Build Colcon packages.
-
-        This function runs some pre-build steps to prepare the sources for building in
-        the Snapcraft environment, builds the packages with colcon, and finally runs
-        some post-build clean steps to prepare the newly-minted install to be packaged
-        as a .snap.
-        """
-
         super().build()
 
-        logger.info("Preparing to build colcon packages...")
-        self._prepare_build()
-
-        logger.info("Building colcon packages...")
-        self._build_colcon_packages()
-
-        logger.info("Cleaning up newly installed colcon packages...")
-        self._finish_build()
-
-    def _prepare_build(self):
-        # Fix all shebangs to use the in-snap python.
         mangling.rewrite_python_shebangs(self.installdir)
-
-        # Rewrite the prefixes to point to the in-part rosdir instead of the system
-        self._fix_prefixes()
-
-        # Each Colcon package distributes .cmake files so they can be found via
-        # find_package(). However, the Ubuntu packages pulled down as
-        # dependencies contain .cmake files pointing to system paths (e.g.
-        # /usr/lib, /usr/include, etc.). They need to be rewritten to point to
-        # the install directory.
-        def _new_path(path):
-            if not path.startswith(self.installdir):
-                # Not using os.path.join here as `path` is absolute.
-                return self.installdir + path
-            return path
-
-        self._rewrite_cmake_paths(_new_path)
-
-    def _rewrite_cmake_paths(self, new_path_callable):
-        def _rewrite_paths(match):
-            paths = match.group(1).strip().split(";")
-            for i, path in enumerate(paths):
-                # Offer the opportunity to rewrite this path if it's absolute.
-                if os.path.isabs(path):
-                    paths[i] = new_path_callable(path)
-
-            return '"' + ";".join(paths) + '"'
-
-        # Looking for any path-like string
-        file_utils.replace_in_file(
-            self._ros_underlay,
-            re.compile(r".*Config.cmake$"),
-            re.compile(r'"(.*?/.*?)"'),
-            _rewrite_paths,
-        )
-
-    def _finish_build(self):
-        # Fix all shebangs to use the in-snap python.
-        mangling.rewrite_python_shebangs(self.installdir)
-
-        # We've finished the build, but we need to make sure we turn the cmake
-        # files back into something that doesn't include our installdir. This
-        # way it's usable from the staging area, and won't clash with the same
-        # file coming from other parts.
-        pattern = re.compile(r"^{}".format(self.installdir))
-
-        def _new_path(path):
-            return pattern.sub("$ENV{SNAPCRAFT_STAGE}", path)
-
-        self._rewrite_cmake_paths(_new_path)
-
-        # Rewrite prefixes for both the underlay and overlay.
-        self._fix_prefixes()
-
-        # If pip dependencies were installed, generate a sitecustomize that
-        # allows access to them.
-        if self._pip.is_setup() and self._pip.list(user=True):
-            _python.generate_sitecustomize(
-                "3", stage_dir=self.project.stage_dir, install_dir=self.installdir
-            )
-
-    def _fix_prefixes(self):
-        installdir_pattern = re.compile(r"^{}".format(self.installdir))
-        new_prefix = "$SNAP_COLCON_ROOT"
-
-        def _rewrite_prefix(match):
-            # Group 1 is the variable definition, group 2 is the path, which we may need
-            # to modify.
-            path = match.group(3).strip(" \n\t'\"")
-
-            # Bail early if this isn't even a path, or if it's already been rewritten
-            if os.path.sep not in path or new_prefix in path:
-                return match.group()
-
-            # If the path doesn't start with the installdir, then it needs to point to
-            # the underlay given that the upstream ROS packages are expecting to be in
-            # /opt/ros/.
-            if not path.startswith(self.installdir):
-                path = os.path.join(new_prefix, path.lstrip("/"))
-
-            return match.expand(
-                '\\1\\2"{}"\\4'.format(installdir_pattern.sub(new_prefix, path))
-            )
-
-        # Set the AMENT_CURRENT_PREFIX throughout to the in-snap prefix
-        snapcraft.file_utils.replace_in_file(
-            self.installdir,
-            re.compile(r""),
-            re.compile(r"(\${)(AMENT_CURRENT_PREFIX:=)(.*)(})"),
-            _rewrite_prefix,
-        )
-
-        # Set the COLCON_CURRENT_PREFIX (if it's in the installdir) to the in-snap
-        # prefix
-        snapcraft.file_utils.replace_in_file(
-            self.installdir,
-            re.compile(r""),
-            re.compile(
-                r"()(COLCON_CURRENT_PREFIX=)(['\"].*{}.*)()".format(self.installdir)
-            ),
-            _rewrite_prefix,
-        )
-
-        # Set the _colcon_prefix_sh_COLCON_CURRENT_PREFIX throughout to the in-snap
-        # prefix
-        snapcraft.file_utils.replace_in_file(
-            self.installdir,
-            re.compile(r""),
-            re.compile(r"()(_colcon_prefix_sh_COLCON_CURRENT_PREFIX=)(.*)()"),
-            _rewrite_prefix,
-        )
-
-        # Set the _colcon_package_sh_COLCON_CURRENT_PREFIX throughout to the in-snap
-        # prefix
-        snapcraft.file_utils.replace_in_file(
-            self.installdir,
-            re.compile(r""),
-            re.compile(r"()(_colcon_package_sh_COLCON_CURRENT_PREFIX=)(.*)()"),
-            _rewrite_prefix,
-        )
-
-        # Set the _colcon_prefix_chain_sh_COLCON_CURRENT_PREFIX throughout to the in-snap
-        # prefix
-        snapcraft.file_utils.replace_in_file(
-            self.installdir,
-            re.compile(r""),
-            re.compile(r"()(_colcon_prefix_chain_sh_COLCON_CURRENT_PREFIX=)(.*)()"),
-            _rewrite_prefix,
-        )
-
-        # Set the _colcon_python_executable throughout to use the in-snap python
-        snapcraft.file_utils.replace_in_file(
-            self.installdir,
-            re.compile(r""),
-            re.compile(r"()(_colcon_python_executable=)(.*)()"),
-            _rewrite_prefix,
-        )
-
-    def _build_colcon_packages(self):
-        # Nothing to do if no packages were specified
-        if self._packages is not None and len(self._packages) == 0:
-            return
-
-        colconcmd = ["colcon", "build", "--merge-install"]
-
-        if self._packages:
-            # Specify the packages to be built
-            colconcmd.append("--packages-select")
-            colconcmd.extend(self._packages)
-
-        if self.options.colcon_packages_ignore:
-            colconcmd.extend(
-                ["--packages-ignore"] + self.options.colcon_packages_ignore
-            )
-
-        # Don't clutter the real ROS workspace-- use the Snapcraft build
-        # directory
-        colconcmd.extend(["--build-base", self.builddir])
-
-        # Account for a non-default source space by always specifying it
-        colconcmd.extend(["--base-paths", self._ros_package_path])
-
-        # Specify that the packages should be installed into the overlay
-        colconcmd.extend(["--install-base", self._ros_overlay])
-
-        # Specify the number of workers
-        colconcmd.append("--parallel-workers={}".format(self.parallel_build_count))
-
-        # All the arguments that follow are meant for CMake
-        colconcmd.append("--cmake-args")
-
-        build_type = "Release"
-        if "debug" in self.options.build_attributes:
-            build_type = "Debug"
-        colconcmd.extend(["-DCMAKE_BUILD_TYPE={}".format(build_type)])
-
-        # Finally, add any cmake-args requested from the plugin options
-        colconcmd.extend(self.options.colcon_cmake_args)
-
-        if self.options.colcon_catkin_cmake_args:
-            colconcmd.extend(
-                ["--catkin-cmake-args"] + self.options.colcon_catkin_cmake_args
-            )
-
-        if self.options.colcon_ament_cmake_args:
-            colconcmd.extend(
-                ["--ament-cmake-args"] + self.options.colcon_ament_cmake_args
-            )
-
-        self.run(colconcmd)
-
-
-def _find_system_dependencies(colcon_packages, rosdep):
-    """Find system dependencies for a given set of Colcon packages."""
-
-    resolved_dependencies = {}
-    dependencies = set()
-
-    logger.info("Determining system dependencies for Colcon packages...")
-    if colcon_packages is not None:
-        for package in colcon_packages:
-            # Query rosdep for the list of dependencies for this package
-            dependencies |= rosdep.get_dependencies(package)
-    else:
-        # Rather than getting dependencies for an explicit list of packages,
-        # let's get the dependencies for the entire workspace.
-        dependencies |= rosdep.get_dependencies()
-
-    for dependency in dependencies:
-        _resolve_package_dependencies(
-            colcon_packages, dependency, rosdep, resolved_dependencies
-        )
-
-    # We currently have nested dict structure of:
-    #    dependency name -> package type -> package names
-    #
-    # We want to return a flattened dict of package type -> package names.
-    flattened_dependencies = collections.defaultdict(set)
-    for dependency_types in resolved_dependencies.values():
-        for key, value in dependency_types.items():
-            flattened_dependencies[key] |= value
-
-    # Finally, return that dict of dependencies
-    return flattened_dependencies
-
-
-def _resolve_package_dependencies(
-    colcon_packages, dependency, rosdep, resolved_dependencies
-):
-    # No need to resolve this dependency if we know it's local, or if
-    # we've already resolved it into a system dependency
-    if dependency in resolved_dependencies or (
-        colcon_packages and dependency in colcon_packages
-    ):
-        return
-
-    # In this situation, the package depends on something that we
-    # weren't instructed to build. It's probably a system dependency,
-    # but the developer could have also forgotten to tell us to build
-    # it.
-    try:
-        these_dependencies = rosdep.resolve_dependency(dependency)
-    except _ros.rosdep.RosdepDependencyNotResolvedError:
-        raise ColconInvalidSystemDependencyError(dependency)
-
-    for key, value in these_dependencies.items():
-        if key not in _SUPPORTED_DEPENDENCY_TYPES:
-            raise ColconUnsupportedDependencyTypeError(key, dependency)
-
-        resolved_dependencies[dependency] = {key: value}
