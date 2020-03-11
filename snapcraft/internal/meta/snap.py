@@ -25,6 +25,7 @@ from snapcraft.internal import common
 from snapcraft.internal.meta import errors
 from snapcraft.internal.meta.application import Application
 from snapcraft.internal.meta.hooks import Hook
+from snapcraft.internal.meta.package_management import PackageManagement
 from snapcraft.internal.meta.plugs import ContentPlug, Plug
 from snapcraft.internal.meta.slots import ContentSlot, Slot
 from snapcraft.internal.meta.system_user import SystemUser
@@ -51,6 +52,7 @@ class Snap:
         layout: Optional[Dict[str, Any]] = None,
         license: Optional[str] = None,
         name: Optional[str] = None,
+        package_management: Optional[PackageManagement] = None,
         passthrough: Optional[Dict[str, Any]] = None,
         plugs: Optional[Dict[str, Plug]] = None,
         slots: Optional[Dict[str, Slot]] = None,
@@ -101,6 +103,11 @@ class Snap:
 
         self.license = license
         self.name = name
+
+        if package_management is None:
+            self.package_management = PackageManagement()
+        else:
+            self.package_management = package_management
 
         if passthrough is None:
             self.passthrough: Dict[str, Any] = dict()
@@ -283,6 +290,11 @@ class Snap:
         layout = snap_dict.pop("layout", None)
         license = snap_dict.pop("license", None)
         name = snap_dict.pop("name", None)
+
+        package_management = PackageManagement.from_object(
+            snap_dict.pop("package-management", None)
+        )
+
         passthrough = snap_dict.pop("passthrough", None)
 
         # Process plugs into Plugs.
@@ -336,6 +348,7 @@ class Snap:
             layout=layout,
             license=license,
             name=name,
+            package_management=package_management,
             passthrough=passthrough,
             plugs=plugs,
             slots=slots,
