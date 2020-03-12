@@ -18,6 +18,7 @@ import logging
 import os
 from collections import OrderedDict
 from copy import deepcopy
+from distutils.util import strtobool
 from typing import Any, Dict, List, Set, Sequence, Optional
 
 from snapcraft import yaml_utils
@@ -291,9 +292,16 @@ class Snap:
         license = snap_dict.pop("license", None)
         name = snap_dict.pop("name", None)
 
-        package_management = PackageManagement.from_object(
-            snap_dict.pop("package-management", None)
-        )
+        pm = snap_dict.pop("package-management", None)
+        if pm is not None:
+            pm_flag = os.getenv("SNAPCRAFT_EXPERIMENTAL_PACKAGE_MANAGEMENT")
+            if pm_flag is None or not strtobool(pm_flag):
+                raise RuntimeError(
+                    "Use of `package-management` requires `--experimental-package-management` option."
+                )
+            else:
+                logger.warn("*EXPERIMENTAL* package-management option in use!")
+        package_management = PackageManagement.from_object(pm)
 
         passthrough = snap_dict.pop("passthrough", None)
 

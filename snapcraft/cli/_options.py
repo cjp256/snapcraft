@@ -114,6 +114,13 @@ _PROVIDER_OPTIONS = [
         envvar="SNAPCRAFT_BIND_SSH",
         supported_providers=["lxd", "multipass"],
     ),
+    dict(
+        param_decls="--experimental-package-management",
+        is_flag=True,
+        help="*EXPERIMENTAL* Enables 'package-management' configuration.",
+        envvar="SNAPCRAFT_EXPERIMENTAL_PACKAGE_MANAGEMENT",        
+        supported_providers=["host", "lxd", "managed-host", "multipass"],
+    ),
 ]
 
 
