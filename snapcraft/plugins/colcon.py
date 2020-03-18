@@ -58,6 +58,7 @@ Additionally, this plugin uses the following plugin-specific keywords:
 
 import contextlib
 import collections
+import glob
 import os
 import logging
 import re
@@ -330,6 +331,40 @@ class ColconPlugin(snapcraft.BasePlugin):
     def get_build_environment(self) -> Dict[str, str]:
         env = super().get_build_environment()
 
+        if self.options.colcon_packages_ignore:
+            args = ["--packages-ignore", *self.options.colcon_packages_ignore]
+            packages_ignore_args = " ".join(args)
+        else:
+            packages_ignore_args = ""
+
+        if self._packages:
+            args = ["--packages-select", *self._packages]
+            packages_select_args = " ".join(args)
+        else:
+            packages_select_args = ""
+
+        if self.options.colcon_ament_cmake_args:
+            args = ["--ament-cmake-args", *self.options.colcon_ament_cmake_args]
+            ament_cmake_args = " ".join(args)
+        else:
+            ament_cmake_args = ""
+
+        if self.options.colcon_catkin_cmake_args:
+            args = ["--catkin-cmake-args", *self.options.colcon_catkin_cmake_args]
+            catkin_cmake_args = " ".join(args)
+        else:
+            catkin_cmake_args = ""
+
+        build_type = "Release"
+        if "debug" in self.options.build_attributes:
+            build_type = "Debug"
+
+        cmake_args = [
+            "--cmake-args",
+            "-DCMAKE_BUILD_TYPE={}",
+            *self.options.colcon_cmake_args,
+        ]
+
         env.update(
             {
                 "AMENT_PYTHON_EXECUTABLE": "/usr/bin/python3",
@@ -338,11 +373,11 @@ class ColconPlugin(snapcraft.BasePlugin):
                 "ROS_DISTRO": self._rosdistro,
                 "ROS_PACKAGE_PATH": self.builddir,
                 "ROS_PYTHON_VERSION": "3",
-                "SNAPCRAFT_COLCON_CMAKE_ARGS": "--cmake-args -DCMAKE_BUILD_TYPE=release",  # --cmake-args <...>
-                "SNAPCRAFT_COLCON_AMENT_ARGS": "",  # --ament-cmake-args <...>
-                "SNAPCRAFT_COLCON_CATKIN_ARGS": "",  # --catkin-cmake-args <...>
-                "SNAPCRAFT_COLCON_PACKAGES_IGNORE_ARGS": "",  # --packages-ignore <...>
-                "SNAPCRAFT_COLCON_PACKAGES_SELECT_ARGS": "",  # --packages-select <...>
+                "SNAPCRAFT_COLCON_CMAKE_ARGS": cmake_args,
+                "SNAPCRAFT_COLCON_AMENT_CMAKE_ARGS": ament_cmake_args,
+                "SNAPCRAFT_COLCON_CATKIN_CMAKE_ARGS": catkin_cmake_args,
+                "SNAPCRAFT_COLCON_PACKAGES_IGNORE_ARGS": packages_ignore_args,
+                "SNAPCRAFT_COLCON_PACKAGES_SELECT_ARGS": packages_select_args,
                 "SNAPCRAFT_COLCON_BUILD_BASE": self.builddir,
                 "SNAPCRAFT_COLCON_BASE_PATHS": "$SNAPCRAFT_PART_SRC_SUBDIR",
                 "SNAPCRAFT_COLCON_INSTALL_BASE": "$SNAPCRAFT_PART_INSTALL/opt/ros/snap",
@@ -351,13 +386,26 @@ class ColconPlugin(snapcraft.BasePlugin):
 
         return env
 
+    def _which_python3(self) -> str:
+        snap_env = os.environ.get("SNAP")
+        if snap_env:
+            return "$SNAP/usr/bin/python3"
+
+        virtual_env = os.environ.get("VIRTUAL_ENV")
+        if virtual_env:
+            return "$VIRTUAL_ENV/bin/python3"
+
+        return "python3"
+
     def get_build_commands(self) -> List[str]:
+        host_python = self._which_python3()
         return [
             "source /opt/ros/$ROS_DISTRO/setup.bash",
             "if [ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]; then sudo rosdep init; fi",
             "rosdep update",
             "rosdep install --from-paths $SNAPCRAFT_COLCON_BASE_PATHS -y -r",
             "colcon build --merge-install --build-base $SNAPCRAFT_COLCON_BUILD_BASE --base-paths $SNAPCRAFT_COLCON_BASE_PATHS --install-base $SNAPCRAFT_COLCON_INSTALL_BASE --parallel-workers=$SNAPCRAFT_PARALLEL_BUILD_COUNT $SNAPCRAFT_ROS_CMAKE_ARGS $SNAPCRAFT_ROS_AMENT_ARGS $SNAPCRAFT_ROS_CATKIN_CMAKE_ARGS $SNAPCRAFT_ROS_PACKAGES_IGNORE_ARGS $SNAPCRAFT_ROS_PACKAGES_SELECT_ARGS",
+            f"{host_python} -c 'from snapcraft.plugins import colcon; colcon.rewrite_prefixes()' || bash",
         ]
 
     def env(self, root):
@@ -401,13 +449,13 @@ class ColconPlugin(snapcraft.BasePlugin):
             set --
 
             # First, source the upstream ROS underlay
-            if [ -f "/opt/ros/{ros_distro}/setup.sh" ]; then
-                . "/opt/ros/{ros_distro}/setup.sh"
+            if [ -f "$SNAP/opt/ros/{ros_distro}/setup.sh" ]; then
+                . "$SNAP/opt/ros/{ros_distro}/setup.sh"
             fi
 
             # Then source the overlay
-            if [ -f "/opt/ros/snap/setup.sh" ]; then
-                . "/opt/ros/snap/setup.sh"
+            if [ -f "$SNAP/opt/ros/snap/setup.sh" ]; then
+                . "$SNAP/opt/ros/snap/setup.sh"
             fi
 
             eval "set -- $BACKUP_ARGS"
@@ -416,7 +464,129 @@ class ColconPlugin(snapcraft.BasePlugin):
             )
         )
 
-    def build(self):
-        super().build()
 
-        mangling.rewrite_python_shebangs(self.installdir)
+def _rewrite_cmake_paths(new_path_callable, install_dir: str, ros_underlay_dir: str):
+    def _rewrite_paths(match):
+        paths = match.group(1).strip().split(";")
+        for i, path in enumerate(paths):
+            # Offer the opportunity to rewrite this path if it's absolute.
+            if os.path.isabs(path):
+                paths[i] = new_path_callable(path)
+
+        return '"' + ";".join(paths) + '"'
+
+    # Looking for any path-like string
+    file_utils.replace_in_file(
+        ros_underlay_dir,
+        re.compile(r".*Config.cmake$"),
+        re.compile(r'"(.*?/.*?)"'),
+        _rewrite_paths,
+    )
+
+
+def _fix_prefixes(install_dir: str):
+    installdir_pattern = re.compile(r"^{}".format(install_dir))
+    new_prefix = "$SNAP_COLCON_ROOT"
+
+    def _rewrite_prefix(match):
+        # Group 1 is the variable definition, group 2 is the path, which we may need
+        # to modify.
+        path = match.group(3).strip(" \n\t'\"")
+
+        # Bail early if this isn't even a path, or if it's already been rewritten
+        if os.path.sep not in path or new_prefix in path:
+            return match.group()
+
+        # If the path doesn't start with the installdir, then it needs to point to
+        # the underlay given that the upstream ROS packages are expecting to be in
+        # /opt/ros/.
+        if not path.startswith(install_dir):
+            path = os.path.join(new_prefix, path.lstrip("/"))
+
+        return match.expand(
+            '\\1\\2"{}"\\4'.format(installdir_pattern.sub(new_prefix, path))
+        )
+
+    # Set the AMENT_CURRENT_PREFIX throughout to the in-snap prefix
+    snapcraft.file_utils.replace_in_file(
+        install_dir,
+        re.compile(r""),
+        re.compile(r"(\${)(AMENT_CURRENT_PREFIX:=)(.*)(})"),
+        _rewrite_prefix,
+    )
+
+    # Set the COLCON_CURRENT_PREFIX (if it's in the installdir) to the in-snap
+    # prefix
+    snapcraft.file_utils.replace_in_file(
+        install_dir,
+        re.compile(r""),
+        re.compile(r"()(COLCON_CURRENT_PREFIX=)(['\"].*{}.*)()".format(install_dir)),
+        _rewrite_prefix,
+    )
+
+    # Set the _colcon_prefix_sh_COLCON_CURRENT_PREFIX throughout to the in-snap
+    # prefix
+    snapcraft.file_utils.replace_in_file(
+        install_dir,
+        re.compile(r""),
+        re.compile(r"()(_colcon_prefix_sh_COLCON_CURRENT_PREFIX=)(.*)()"),
+        _rewrite_prefix,
+    )
+
+    # Set the _colcon_package_sh_COLCON_CURRENT_PREFIX throughout to the in-snap
+    # prefix
+    snapcraft.file_utils.replace_in_file(
+        install_dir,
+        re.compile(r""),
+        re.compile(r"()(_colcon_package_sh_COLCON_CURRENT_PREFIX=)(.*)()"),
+        _rewrite_prefix,
+    )
+
+    # Set the _colcon_prefix_chain_sh_COLCON_CURRENT_PREFIX throughout to the in-snap
+    # prefix
+    snapcraft.file_utils.replace_in_file(
+        install_dir,
+        re.compile(r""),
+        re.compile(r"()(_colcon_prefix_chain_sh_COLCON_CURRENT_PREFIX=)(.*)()"),
+        _rewrite_prefix,
+    )
+
+    # Set the _colcon_python_executable throughout to use the in-snap python
+    snapcraft.file_utils.replace_in_file(
+        install_dir,
+        re.compile(r""),
+        re.compile(r"()(_colcon_python_executable=)(.*)()"),
+        _rewrite_prefix,
+    )
+
+
+def rewrite_prefixes():
+    install_dir = os.environ["SNAPCRAFT_PART_INSTALL"]
+    ros_distro = os.environ["ROS_DISTRO"]
+    stage_dir = os.environ["SNAPCRAFT_STAGE"]
+
+    ros_underlay_dir = os.path.join(install_dir, "opt", "ros", ros_distro)
+
+    # Fix all shebangs to use the in-snap python.
+    mangling.rewrite_python_shebangs(install_dir)
+
+    # We've finished the build, but we need to make sure we turn the cmake
+    # files back into something that doesn't include our installdir. This
+    # way it's usable from the staging area, and won't clash with the same
+    # file coming from other parts.
+    pattern = re.compile(r"^{}".format(install_dir))
+
+    def _new_path(path):
+        return pattern.sub("$ENV{SNAPCRAFT_STAGE}", path)
+
+    _rewrite_cmake_paths(_new_path, install_dir, ros_underlay_dir)
+
+    # Rewrite prefixes for both the underlay and overlay.
+    _fix_prefixes(install_dir)
+
+    # TODO: Better way to conditionally set this?
+    path_glob = os.path.join(install_dir, "lib", "python3*", "site-packages")
+    if glob.glob(path_glob):
+        _python.generate_sitecustomize(
+            "3", stage_dir=stage_dir, install_dir=install_dir
+        )
