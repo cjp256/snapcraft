@@ -20,6 +20,7 @@ import re
 import shutil
 import subprocess
 import sys
+from typing import Dict, Set
 
 from snapcraft.internal import errors, repo
 
@@ -55,6 +56,36 @@ class RosdepInitializationError(errors.SnapcraftError):
 
     def __init__(self, message):
         super().__init__(message=message)
+
+
+def _parse_dependencies(output: str) -> Dict[str, Set[str]]:
+    # The output of rosdep follows the pattern:
+    #
+    #    #apt
+    #    package1
+    #    package2
+    #    #pip
+    #    pip-package1
+    #    pip-package2
+    #
+    # Split these out into a dict of dependency type -> dependencies.
+    delimiters = re.compile(r"\n|\s")
+    lines = delimiters.split(output)
+    dependencies: Dict[str, Set[str]] = {}
+    dependency_set = None
+    for line in lines:
+        line = line.strip()
+        if line.startswith("#"):
+            key = line.strip("# ")
+            dependencies[key] = set()
+            dependency_set = dependencies[key]
+        elif line:
+            if dependency_set is None:
+                raise RosdepUnexpectedResultError(dependency_name, output)
+            else:
+                dependency_set.add(line)
+
+    return dependencies
 
 
 class Rosdep:
@@ -145,7 +176,9 @@ class Rosdep:
             command.append("-a")
             command.append("-i")
         try:
+            print("rosdep command:", command)
             output = self._run(command).strip()
+            print("rosdep output:", output)
             if output:
                 return set(output.split("\n"))
             else:
@@ -174,33 +207,7 @@ class Rosdep:
         except subprocess.CalledProcessError:
             raise RosdepDependencyNotResolvedError(dependency_name)
 
-        # The output of rosdep follows the pattern:
-        #
-        #    #apt
-        #    package1
-        #    package2
-        #    #pip
-        #    pip-package1
-        #    pip-package2
-        #
-        # Split these out into a dict of dependency type -> dependencies.
-        delimiters = re.compile(r"\n|\s")
-        lines = delimiters.split(output)
-        dependencies = {}
-        dependency_set = None
-        for line in lines:
-            line = line.strip()
-            if line.startswith("#"):
-                key = line.strip("# ")
-                dependencies[key] = set()
-                dependency_set = dependencies[key]
-            elif line:
-                if dependency_set is None:
-                    raise RosdepUnexpectedResultError(dependency_name, output)
-                else:
-                    dependency_set.add(line)
-
-        return dependencies
+        return _parse_dependencies(output)
 
     def _run(self, arguments):
         env = os.environ.copy()

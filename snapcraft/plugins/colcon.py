@@ -56,6 +56,7 @@ Additionally, this plugin uses the following plugin-specific keywords:
       quoting each argument with a leading space.
 """
 
+import click
 import contextlib
 import collections
 import glob
@@ -63,8 +64,10 @@ import os
 import logging
 import re
 import shutil
+import subprocess
+import sys
 import textwrap
-from typing import Dict, List
+from typing import Dict, List, Set, Tuple
 
 import snapcraft
 from snapcraft.plugins import _ros
@@ -128,6 +131,15 @@ h+sLkzGf+my2IbsMCuc+3aeNMJ5Ej/vlXefCH/MpPWAHCqpQhe2DET/jRSaM53US
 AHNx8kw4MPUkxExgI7Sd
 =4Ofr
 -----END PGP PUBLIC KEY BLOCK-----
+"""
+
+# XXX: will be removed with global apt config
+_ROS2_REPO = """
+deb http://repo.ros2.org/ubuntu/main bionic main
+deb http://${prefix}.ubuntu.com/${suffix}/ bionic main universe
+deb http://${prefix}.ubuntu.com/${suffix}/ bionic-updates main universe
+deb http://${prefix}.ubuntu.com/${suffix}/ bionic-security main universe
+deb http://${security}.ubuntu.com/${suffix}/ bionic-security main universe
 """
 
 
@@ -338,9 +350,12 @@ class ColconPlugin(snapcraft.BasePlugin):
             packages_ignore_args = ""
 
         if self._packages:
-            args = ["--packages-select", *self._packages]
+            args = ["--packages-select $SNAPCRAFT_COLCON_PACKAGES"]
+            packages = " ".join(self._packages)
             packages_select_args = " ".join(args)
+
         else:
+            packages = ""
             packages_select_args = ""
 
         if self.options.colcon_ament_cmake_args:
@@ -371,7 +386,7 @@ class ColconPlugin(snapcraft.BasePlugin):
                 "COLCON_PYTHON_EXECUTABLE": "/usr/bin/python3",
                 "SNAP_COLCON_ROOT": "/",
                 "ROS_DISTRO": self._rosdistro,
-                "ROS_PACKAGE_PATH": self.builddir,
+                "ROS_PACKAGE_PATH": self._ros_package_path,
                 "ROS_PYTHON_VERSION": "3",
                 "SNAPCRAFT_COLCON_CMAKE_ARGS": cmake_args,
                 "SNAPCRAFT_COLCON_AMENT_CMAKE_ARGS": ament_cmake_args,
@@ -379,33 +394,23 @@ class ColconPlugin(snapcraft.BasePlugin):
                 "SNAPCRAFT_COLCON_PACKAGES_IGNORE_ARGS": packages_ignore_args,
                 "SNAPCRAFT_COLCON_PACKAGES_SELECT_ARGS": packages_select_args,
                 "SNAPCRAFT_COLCON_BUILD_BASE": self.builddir,
-                "SNAPCRAFT_COLCON_BASE_PATHS": "$SNAPCRAFT_PART_SRC_SUBDIR",
                 "SNAPCRAFT_COLCON_INSTALL_BASE": "$SNAPCRAFT_PART_INSTALL/opt/ros/snap",
+                "SNAPCRAFT_COLCON_PACKAGES": packages,
             }
         )
 
         return env
 
-    def _which_python3(self) -> str:
-        snap_env = os.environ.get("SNAP")
-        if snap_env:
-            return "$SNAP/usr/bin/python3"
-
-        virtual_env = os.environ.get("VIRTUAL_ENV")
-        if virtual_env:
-            return "$VIRTUAL_ENV/bin/python3"
-
-        return "python3"
-
     def get_build_commands(self) -> List[str]:
-        host_python = self._which_python3()
         return [
             "source /opt/ros/$ROS_DISTRO/setup.bash",
             "if [ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]; then sudo rosdep init; fi",
             "rosdep update",
-            "rosdep install --from-paths $SNAPCRAFT_COLCON_BASE_PATHS -y -r",
-            "colcon build --merge-install --build-base $SNAPCRAFT_COLCON_BUILD_BASE --base-paths $SNAPCRAFT_COLCON_BASE_PATHS --install-base $SNAPCRAFT_COLCON_INSTALL_BASE --parallel-workers=$SNAPCRAFT_PARALLEL_BUILD_COUNT $SNAPCRAFT_ROS_CMAKE_ARGS $SNAPCRAFT_ROS_AMENT_ARGS $SNAPCRAFT_ROS_CATKIN_CMAKE_ARGS $SNAPCRAFT_ROS_PACKAGES_IGNORE_ARGS $SNAPCRAFT_ROS_PACKAGES_SELECT_ARGS",
-            f"{host_python} -c 'from snapcraft.plugins import colcon; colcon.rewrite_prefixes()' || bash",
+            f"{sys.executable} -m snapcraft.plugins.colcon stage-dependencies || bash",
+            "rosdep install --from-paths $ROS_PACKAGE_PATH -y -r",
+            "colcon build --merge-install --build-base $SNAPCRAFT_COLCON_BUILD_BASE --base-paths $ROS_PACKAGE_PATH --install-base $SNAPCRAFT_COLCON_INSTALL_BASE --parallel-workers=$SNAPCRAFT_PARALLEL_BUILD_COUNT $SNAPCRAFT_ROS_CMAKE_ARGS $SNAPCRAFT_ROS_AMENT_ARGS $SNAPCRAFT_ROS_CATKIN_CMAKE_ARGS $SNAPCRAFT_ROS_PACKAGES_IGNORE_ARGS $SNAPCRAFT_ROS_PACKAGES_SELECT_ARGS",
+            f"{sys.executable} -m snapcraft.plugins.colcon rewrite-prefixes || bash",
+            "sed -i 's|^COLCON_CURRENT_PREFIX=\"/opt.*|COLCON_CURRENT_PREFIX=\"$SNAP_COLCON_ROOT/opt/ros/'$ROS_DISTRO'\"|g' $SNAPCRAFT_COLCON_INSTALL_BASE/setup.sh",
         ]
 
     def env(self, root):
@@ -426,6 +431,7 @@ class ColconPlugin(snapcraft.BasePlugin):
 
     def _source_setup_sh(self, root):
         # TODO: install this as file
+        print("source setup:", root)
 
         # We need to source ROS's setup.sh at this point. However, it accepts
         # arguments (thus will parse $@), and we really don't want it to, since
@@ -449,18 +455,18 @@ class ColconPlugin(snapcraft.BasePlugin):
             set --
 
             # First, source the upstream ROS underlay
-            if [ -f "$SNAP/opt/ros/{ros_distro}/setup.sh" ]; then
-                . "$SNAP/opt/ros/{ros_distro}/setup.sh"
+            if [ -f "{root}/opt/ros/{ros_distro}/setup.sh" ]; then
+                . "{root}/opt/ros/{ros_distro}/setup.sh"
             fi
 
             # Then source the overlay
-            if [ -f "$SNAP/opt/ros/snap/setup.sh" ]; then
-                . "$SNAP/opt/ros/snap/setup.sh"
+            if [ -f "{root}/opt/ros/snap/setup.sh" ]; then
+                . "{root}/opt/ros/snap/setup.sh"
             fi
 
             eval "set -- $BACKUP_ARGS"
         """.format(
-                ros_distro=self._rosdistro
+                root=root, ros_distro=self._rosdistro
             )
         )
 
@@ -560,6 +566,83 @@ def _fix_prefixes(install_dir: str):
     )
 
 
+def stage_apt_packages(*, install_dir: str, packages: List[str]) -> None:
+    print(packages)
+
+    ubuntudir = os.path.join(install_dir, "..", "ubuntu")
+    os.makedirs(ubuntudir, exist_ok=True)
+
+    logger.info("Preparing to fetch apt dependencies...")
+    ubuntu = repo.Ubuntu(
+        ubuntudir,
+        sources=_ROS2_REPO,
+        keyrings=[_ROS_KEYRING_PATH],
+        project_options=None,
+    )
+
+    logger.info("Fetching apt dependencies...")
+    try:
+        ubuntu.get(packages)
+    except repo.errors.PackageNotFoundError as e:
+        raise ColconAptDependencyFetchError(e.message)
+
+    logger.info("Installing apt dependencies...")
+    ubuntu.unpack(install_dir)
+
+
+def stage_python_packages(
+    *, part_dir: str, install_dir: str, stage_dir: str, packages: List[str]
+) -> None:
+    pip = _python.Pip(
+        python_major_version="3",  # ROS2 uses python3
+        part_dir=part_dir,
+        install_dir=install_dir,
+        stage_dir=stage_dir,
+    )
+
+    pip.setup()
+
+    logger.info("Fetching pip dependencies...")
+    pip.download(packages)
+
+    logger.info("Installing pip dependencies...")
+    pip.install(packages)
+
+
+def get_rosdep_dependencies() -> Tuple[Set[str], Set[str]]:
+    apt_packages: Set[str] = set()
+    pip_packages: Set[str] = set()
+    ros_distro = os.environ["ROS_DISTRO"]
+
+    deps = (
+        subprocess.check_output(["rosdep", "keys", "-a"])
+        .decode("utf8")
+        .strip()
+        .split("\n")
+    )
+
+    for dep in deps:
+        resolve_output = (
+            subprocess.check_output(
+                ["rosdep", "resolve", dep, "--rosdistro", ros_distro]
+            )
+            .decode("utf8")
+            .strip()
+        )
+
+        parsed = _ros.rosdep._parse_dependencies(resolve_output)
+        apt_packages |= parsed.get("apt", set())
+        pip_packages |= parsed.get("pip", set())
+
+    return apt_packages, pip_packages
+
+
+@click.group()
+def plugin_cli():
+    pass
+
+
+@plugin_cli.command()
 def rewrite_prefixes():
     install_dir = os.environ["SNAPCRAFT_PART_INSTALL"]
     ros_distro = os.environ["ROS_DISTRO"]
@@ -590,3 +673,27 @@ def rewrite_prefixes():
         _python.generate_sitecustomize(
             "3", stage_dir=stage_dir, install_dir=install_dir
         )
+
+
+@plugin_cli.command()
+def stage_dependencies():
+    install_dir = os.environ["SNAPCRAFT_PART_INSTALL"]
+    part_dir = os.path.join(install_dir, "..")
+    stage_dir = os.environ["SNAPCRAFT_STAGE"]
+
+    apt_packages, pip_packages = get_rosdep_dependencies()
+
+    if apt_packages:
+        stage_apt_packages(install_dir=install_dir, packages=apt_packages)
+
+    if pip_packages:
+        stage_python_packages(
+            install_dir=install_dir,
+            part_dir=part_dir,
+            stage_dir=stage_dir,
+            packages=pip_packages,
+        )
+
+
+if __name__ == "__main__":
+    plugin_cli()
