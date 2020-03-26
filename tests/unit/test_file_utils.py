@@ -17,6 +17,7 @@
 import os
 import re
 import subprocess
+from pathlib import Path
 from unittest import mock
 
 import testtools
@@ -420,3 +421,37 @@ class GetToolPathErrorsTest(testtools.TestCase):
             file_utils.get_tool_path,
             "non-existent-tool-command",
         )
+
+
+class TestSudoWriteFile(unit.TestCase):
+    @mock.patch("subprocess.run")
+    def test_run_command(self, mock_run):
+        path = Path(self.path, "foo")
+
+        file_utils.sudo_write_file(path=path, mode="777", content="foo".encode())
+
+        mock_run.assert_called_once_with(
+            [
+                "sudo",
+                "install",
+                "--owner=root",
+                "--group=root",
+                "--mode=777",
+                mock.ANY,
+                str(path),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+        )
+
+    def test_stat_and_contents(self):
+        path = Path(self.path, "foo")
+
+        file_utils.sudo_write_file(path=path, mode="777", content="foo".encode())
+
+        self.assertThat(path.exists(), Equals(True))
+        self.assertThat(path.owner(), Equals("root"))
+        self.assertThat(path.group(), Equals("root"))
+        self.assertThat(path.stat().st_mode & 0o777, Equals(0o777))
+
+        path.unlink()

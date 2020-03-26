@@ -14,7 +14,6 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from contextlib import contextmanager, suppress
 import errno
 import hashlib
 import logging
@@ -24,6 +23,9 @@ import shutil
 import stat
 import subprocess
 import sys
+import tempfile
+from contextlib import contextmanager, suppress
+from pathlib import Path
 from typing import Pattern, Callable, Generator, List, Optional, Set
 
 from snapcraft.internal import common
@@ -438,3 +440,24 @@ def _remove_readonly(func, path, excinfo):
 def rmtree(path: str) -> None:
     """Cross-platform rmtree implementation."""
     shutil.rmtree(path, onerror=_remove_readonly)
+
+
+def sudo_write_file(*, path: Path, content: bytes, mode: str) -> None:
+    """Workaround for writing to privileged files."""
+    with tempfile.NamedTemporaryFile() as tf:
+        tf.write(content)
+        tf.flush()
+
+        try:
+            command = [
+                "sudo",
+                "install",
+                "--owner=root",
+                "--group=root",
+                f"--mode={mode}",
+                tf.name,
+                str(path),
+            ]
+            subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        except subprocess.CalledProcessError as error:
+            raise RuntimeError(f"failed to run {command!r}: {error.stdout}")
