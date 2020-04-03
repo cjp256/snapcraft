@@ -26,6 +26,7 @@ import string
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 from typing import Dict, List, Optional, Set, Tuple  # noqa: F401
 
 import apt
@@ -191,11 +192,28 @@ def _run_dpkg_query_list_files(package_name: str) -> Set[str]:
     return {i for i in output if ("lib" in i and os.path.isfile(i))}
 
 
-class _AptCache:
-    def __init__(self, *, sources: List[str], keyrings: List[str]):
-        self._sources = sources
-        self._keyrings = keyrings
+def _sudo_write_file(*, dst_path: Path, content: bytes) -> None:
+    """Workaround for writing to privileged files."""
+    with tempfile.NamedTemporaryFile() as src_f:
+        src_f.write(content)
+        src_f.flush()
 
+        try:
+            command = [
+                "sudo",
+                "install",
+                "--owner=root",
+                "--group=root",
+                "--mode=0644",
+                src_f.name,
+                str(dst_path),
+            ]
+            subprocess.check_call(command)
+        except subprocess.CalledProcessError:
+            raise RuntimeError(f"failed to run: {command!r}")
+
+
+class _AptCache:
     def _setup_apt(self, cache_dir):
         # Do not install recommends
         apt.apt_pkg.config.set("Apt::Install-Recommends", "False")
@@ -220,40 +238,14 @@ class _AptCache:
             apt.apt_pkg.config.set("Dir::Etc::Trusted", "/etc/apt/trusted.gpg")
             apt.apt_pkg.config.set("Dir::Etc::TrustedParts", "/etc/apt/trusted.gpg.d/")
 
-        # Make sure we always use the system GPG configuration, even with
-        # apt.Cache(rootdir). However, we also want to be able to add keys to it
-        # without root, so symlink back to the system's, but maintain our own.
-        # We'll leave Trusted alone and just fiddle with TrustedParts (Trusted is the
-        # one modified by apt-key, so add-apt-repository should still work).
-        apt.apt_pkg.config.set(
-            "Dir::Etc::Trusted", apt.apt_pkg.config.find_file("Dir::Etc::Trusted")
-        )
         apt_config_path = os.path.join(cache_dir, "etc", "apt", "apt.conf")
-        trusted_parts_path = apt.apt_pkg.config.find_file("Dir::Etc::TrustedParts")
-        if not trusted_parts_path.startswith(cache_dir):
-            cached_trusted_parts = os.path.join(
-                cache_dir, trusted_parts_path.lstrip("/")
-            )
-            with contextlib.suppress(FileNotFoundError):
-                shutil.rmtree(cached_trusted_parts)
-            os.makedirs(cached_trusted_parts)
-            for trusted_part in os.scandir(trusted_parts_path):
-                os.symlink(
-                    os.path.join(trusted_parts_path, trusted_part.name),
-                    os.path.join(cached_trusted_parts, trusted_part.name),
-                )
 
-            apt.apt_pkg.config.set("Dir::Etc::TrustedParts", cached_trusted_parts)
-
-            # The above config is all that is needed on bionic, but xenial
-            # requires this configuration file
-            os.makedirs(os.path.dirname(apt_config_path), exist_ok=True)
-            with open(apt_config_path, "w") as f:
-                f.write("Dir::Etc::TrustedParts {};\n".format(cached_trusted_parts))
-
-            # Now copy in any requested keyrings
-            for keyring in self._keyrings:
-                shutil.copy2(keyring, cached_trusted_parts)
+        # The above config is all that is needed on bionic, but xenial
+        # requires this configuration file
+        os.makedirs(os.path.dirname(apt_config_path), exist_ok=True)
+        with open(apt_config_path, "w") as f:
+            f.write("Dir::Etc::Trusted /etc/apt/trusted.gpg;\n")
+            f.write("Dir::Etc::TrustedParts /etc/apt/trusted.gpg.d/;\n")
 
         # Clear up apt's Post-Invoke-Success as we are not running
         # on the system.
@@ -269,7 +261,7 @@ class _AptCache:
 
         os.makedirs(os.path.dirname(sources_list_file), exist_ok=True)
         with open(sources_list_file, "w") as f:
-            f.write(self._collected_sources_list())
+            f.write(_get_local_sources_list())
 
         # dpkg also needs to be in the rootdir in order to support multiarch
         # (apt calls dpkg --print-foreign-architectures).
@@ -334,19 +326,8 @@ class _AptCache:
 
     def sources_digest(self):
         return hashlib.sha384(
-            self._collected_sources_list().encode(sys.getfilesystemencoding())
+            _get_local_sources_list().encode(sys.getfilesystemencoding())
         ).hexdigest()
-
-    def _collected_sources_list(self) -> str:
-        sources = _get_local_sources_list()
-
-        # Append additionally configured repositories, if any.
-        if self._sources:
-
-            additional_sources = _format_sources_list("\n".join(self._sources))
-            sources = "\n".join([sources, additional_sources])
-
-        return sources
 
 
 class Ubuntu(BaseRepo):
@@ -516,23 +497,77 @@ class Ubuntu(BaseRepo):
                     )
         return installed_packages
 
-    def __init__(
-        self,
-        rootdir,
-        sources: Optional[List[str]] = None,
-        keyrings: Optional[List[str]] = None,
-        project_options=None,
-    ) -> None:
+    @classmethod
+    def _parse_apt_key_output(cls, output: bytes) -> str:
+        """Convert apt-key's output into a more user-friendly message."""
+
+        message: str = output.decode()
+        message = message.replace(
+            "Warning: apt-key output should not be parsed (stdout is not a terminal)",
+            "",
+        ).strip()
+
+        return message
+
+    @classmethod
+    def install_gpg_key(cls, gpg_key: str) -> None:
+        cmd = [
+            "sudo",
+            "apt-key",
+            "--keyring",
+            "/etc/apt/trusted.gpg.d/snapcraft-keyring.gpg",
+            "add",
+            "-",
+        ]
+        try:
+            subprocess.run(
+                cmd,
+                input=gpg_key.encode(),
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                check=True,
+            )
+        except subprocess.CalledProcessError as error:
+            message = cls._parse_apt_key_output(error.output)
+            raise RuntimeError(f"failed to execute {cmd!r}: {message}")
+
+        logger.debug(f"Installed apt repository key:\n{gpg_key}")
+
+    @classmethod
+    def install_source(cls, source_line: str) -> None:
+        """Add deb source line. Supports formatting tag for ${release}."""
+
+        if not source_line.endswith("\n"):
+            source_line += "\n"
+
+        expanded_source = _format_sources_list(source_line)
+
+        extras_path = Path("/etc", "apt", "sources.list.d", "snapcraft.list")
+
+        if extras_path.exists():
+            sources = set(extras_path.read_text().split("\n"))
+        else:
+            sources = set()
+
+        if expanded_source in sources:
+            # Already installed.
+            return
+
+        sources.add(expanded_source)
+        sources_content = "\n".join(sorted(sources)) + "\n"
+
+        _sudo_write_file(dst_path=extras_path, content=sources_content.encode())
+
+        # Refresh sources.
+        cls.refresh_build_packages()
+
+        logger.debug(f"Installed apt repository {expanded_source!r} in {extras_path}")
+
+    def __init__(self, rootdir) -> None:
         super().__init__(rootdir)
         self._downloaddir = os.path.join(rootdir, "download")
 
-        if sources is None:
-            sources = list()
-
-        if keyrings is None:
-            keyrings = list()
-
-        self._apt = _AptCache(sources=sources, keyrings=keyrings)
+        self._apt = _AptCache()
 
         self._cache = cache.AptStagePackageCache(
             sources_digest=self._apt.sources_digest()
