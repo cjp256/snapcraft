@@ -81,7 +81,6 @@ setup(
     entry_points=dict(console_scripts=["snapcraft = snapcraft.cli.__main__:run"]),
     data_files=(
         recursive_data_files("schema", "share/snapcraft")
-        + recursive_data_files("keyrings", "share/snapcraft")
         + recursive_data_files("extensions", "share/snapcraft")
     ),
     install_requires=["pysha3", "pyxdg", "requests"],

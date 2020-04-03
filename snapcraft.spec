@@ -5,7 +5,6 @@ block_cipher = None
 
 data = [
         ("extensions", os.path.join("share", "snapcraft", "extensions")),
-        ("keyrings", os.path.join("share", "snapcraft", "keyrings")),
         ("schema", os.path.join("share", "snapcraft", "schema")),
     ]
 data += collect_data_files("lazr.restfulclient")

@@ -83,7 +83,6 @@ def setup_dirs() -> None:
         common.set_plugindir(os.path.join(topdir, "snapcraft", "plugins"))
         common.set_schemadir(os.path.join(topdir, "schema"))
         common.set_extensionsdir(os.path.join(topdir, "extensions"))
-        common.set_keyringsdir(os.path.join(topdir, "keyrings"))
 
     # The default paths are relative to sys.prefix, which works well for
     # Snapcraft as a deb or in a venv. However, the Python plugin installs
@@ -100,7 +99,6 @@ def setup_dirs() -> None:
         common.set_plugindir(os.path.join(parent_dir, "plugins"))
         common.set_schemadir(os.path.join(parent_dir, "schema"))
         common.set_extensionsdir(os.path.join(parent_dir, "extensions"))
-        common.set_keyringsdir(os.path.join(parent_dir, "keyrings"))
         common.set_legacy_snapcraft_dir(os.path.join(snap_path, "legacy_snapcraft"))
 
     elif sys.platform == "win32":
@@ -109,15 +107,10 @@ def setup_dirs() -> None:
         data_dir = _find_windows_data_dir(topdir)
         common.set_schemadir(os.path.join(data_dir, "schema"))
         common.set_extensionsdir(os.path.join(data_dir, "extensions"))
-        common.set_keyringsdir(os.path.join(data_dir, "keyrings"))
 
     else:
         # Make sure required data directories exist in the default locations.
         # Plugins and legacy snapcraft directory are not required.
-        for d in [
-            common.get_schemadir(),
-            common.get_extensionsdir(),
-            common.get_keyringsdir(),
-        ]:
+        for d in [common.get_schemadir(), common.get_extensionsdir()]:
             if not os.path.exists(d):
                 raise snapcraft.internal.errors.SnapcraftDataDirectoryMissingError()

@@ -136,7 +136,6 @@ class TestCase(testscenarios.WithScenarios, testtools.TestCase):
         self.addCleanup(common.set_plugindir, common.get_plugindir())
         self.addCleanup(common.set_schemadir, common.get_schemadir())
         self.addCleanup(common.set_extensionsdir, common.get_extensionsdir())
-        self.addCleanup(common.set_keyringsdir, common.get_keyringsdir())
         self.addCleanup(common.reset_env)
         common.set_schemadir(os.path.join(get_snapcraft_path(), "schema"))
         self.fake_logger = fixtures.FakeLogger(level=logging.ERROR)

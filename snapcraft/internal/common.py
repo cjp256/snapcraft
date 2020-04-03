@@ -39,8 +39,6 @@ _DEFAULT_SCHEMADIR = os.path.join(sys.prefix, "share", "snapcraft", "schema")
 _schemadir = _DEFAULT_SCHEMADIR
 _DEFAULT_EXTENSIONSDIR = os.path.join(sys.prefix, "share", "snapcraft", "extensions")
 _extensionsdir = _DEFAULT_EXTENSIONSDIR
-_DEFAULT_KEYRINGSDIR = os.path.join(sys.prefix, "share", "snapcraft", "keyrings")
-_keyringsdir = _DEFAULT_KEYRINGSDIR
 _DEFAULT_LEGACY_SNAPCRAFT_DIR = os.path.join(sys.prefix, "legacy_snapcraft")
 _legacy_snapcraft_dir = _DEFAULT_LEGACY_SNAPCRAFT_DIR
 
@@ -209,15 +207,6 @@ def set_extensionsdir(extensionsdir):
 
 def get_extensionsdir():
     return _extensionsdir
-
-
-def set_keyringsdir(keyringsdir):
-    global _keyringsdir
-    _keyringsdir = keyringsdir
-
-
-def get_keyringsdir():
-    return _keyringsdir
 
 
 def get_arch_triplet():
