@@ -219,6 +219,17 @@ class Config:
             properties=self.data, project=project
         )
 
+        keys_path = project._get_keys_dir()
+        repos_changed = any(
+            [
+                package_repo.install(keys_path=keys_path)
+                for package_repo in project._snap_meta.package_repositories
+            ]
+        )
+        if repos_changed:
+            logger.debug("modified source repositories, refreshing cache")
+            repo.Repo.refresh_build_packages()
+
         self.build_tools = grammar_processor.get_build_packages()
         self.build_tools |= set(project.additional_build_packages)
 

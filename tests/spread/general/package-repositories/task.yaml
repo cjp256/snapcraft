@@ -1,0 +1,32 @@
+summary: Test various package-repository configurations.
+
+environment:
+  SNAP/test-apt-deb: test-apt-deb
+  SNAP/test-apt-keyserver: test-apt-keyserver
+  SNAP/test-apt-ppa: test-apt-ppa
+
+systems:
+  - ubuntu-18.04-64
+  - ubuntu-18.04-amd64
+
+prepare: |
+  #shellcheck source=tests/spread/tools/snapcraft-yaml.sh
+  . "$TOOLS_DIR/snapcraft-yaml.sh"
+  set_base "../snaps/$SNAP/snap/snapcraft.yaml"
+
+restore: |
+  cd "../snaps/$SNAP"
+  snapcraft clean
+  rm -f ./*.snap
+
+  #shellcheck source=tests/spread/tools/snapcraft-yaml.sh
+  . "$TOOLS_DIR/snapcraft-yaml.sh"
+  restore_yaml "snap/snapcraft.yaml"
+
+execute: |
+  cd "../snaps/$SNAP"
+
+  # Build what we have and verify the snap runs as expected.
+  snapcraft
+  snap install "${SNAP}"_1.0_*.snap --dangerous
+  [ "$(test-ppa)" = "hello!" ]

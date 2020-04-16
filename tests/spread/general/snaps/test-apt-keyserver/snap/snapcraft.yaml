@@ -1,0 +1,27 @@
+name: test-apt-deb
+version: 'test1'
+summary: test
+description: test
+grade: stable
+confinement: strict
+base: core18
+
+parts:
+  test-ppa:
+    plugin: nil
+    stage-packages:
+      - test-ppa
+
+apps:
+    test-ppa:
+      command: test-ppa
+
+package-repositories:
+  - type: apt
+    deb-types: [deb, deb-src]
+    components: [main]
+    suites: [$release]
+    name: cjp256-test-ppa
+    key-id: 590ca3d8e4826565be3200526a634116e00f4c82
+    url: http://ppa.launchpad.net/cjp256/test-ppa/ubuntu
+    #architectures: [$host_arch]

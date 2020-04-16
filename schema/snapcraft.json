@@ -130,7 +130,7 @@
                     "type": "array",
                     "items": {
                         "type": "string",
-                        "description": "Architectures to enable, or restrict to, for this repository.  Defaults to host architecture."
+                        "description": "Architectures to enable, or restrict to, for this repository.  Defaults to host architecture, supports '$host_arch' and '$target_arch' variables."
                     }
                 },
                 "deb-types": {

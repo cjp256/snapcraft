@@ -14,14 +14,26 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from copy import deepcopy
+import abc
 import logging
+from copy import deepcopy
+from pathlib import Path
 from typing import Any, Dict, List, Optional
+
+from snapcraft.internal.repo._deb import Ubuntu
 
 logger = logging.getLogger(__name__)
 
 
-class PackageRepository:
+class PackageRepository(abc.ABC):
+    @abc.abstractmethod
+    def install(self, *, keys_path: Path) -> bool:
+        ...
+
+    @abc.abstractmethod
+    def marshal(self) -> Dict[str, Any]:
+        ...
+
     @classmethod
     def unmarshal(cls, data: Dict[str, str]) -> "PackageRepository":
         if not isinstance(data, dict):
@@ -52,7 +64,10 @@ class PackageRepositoryAptPpa(PackageRepository):
         self.type = "apt"
         self.ppa = ppa
 
-    def marshal(self):
+    def install(self, *, keys_path: Path) -> bool:
+        return Ubuntu.install_ppa(keys_path=keys_path, ppa=self.ppa)
+
+    def marshal(self) -> Dict[str, Any]:
         data = dict(type="apt")
         data["ppa"] = self.ppa
         return data
@@ -101,8 +116,26 @@ class PackageRepositoryAptDeb(PackageRepository):
         self.suites = suites
         self.url = url
 
-    def marshal(self):
-        data = {"type": "apt"}
+    def install(self, keys_path: Path) -> bool:
+        # First install associated GPG key.
+        new_key: bool = Ubuntu.install_gpg_key_id(
+            keys_path=keys_path, key_id=self.key_id, key_server=self.key_server
+        )
+
+        # Now install sources file.
+        new_sources: bool = Ubuntu.install_deb822_sources(
+            architectures=self.architectures,
+            components=self.components,
+            deb_types=self.deb_types,
+            name=self.name,
+            suites=self.suites,
+            url=self.url,
+        )
+
+        return new_key or new_sources
+
+    def marshal(self) -> Dict[str, Any]:
+        data: Dict[str, Any] = {"type": "apt"}
 
         if self.architectures:
             data["architectures"] = self.architectures
@@ -123,7 +156,7 @@ class PackageRepositoryAptDeb(PackageRepository):
 
         return data
 
-    @classmethod
+    @classmethod  # noqa: C901
     def unmarshal(cls, data: Dict[str, Any]) -> "PackageRepositoryAptDeb":
         if not isinstance(data, dict):
             raise RuntimeError(f"invalid deb repository object: {data!r}")
@@ -140,33 +173,55 @@ class PackageRepositoryAptDeb(PackageRepository):
         url = data_copy.pop("url", None)
         repo_type = data_copy.pop("type", None)
 
-        if (
-            repo_type != "apt"
-            or (
-                architectures is not None
-                and (
-                    not isinstance(architectures, list)
-                    or not all(isinstance(x, str) for x in architectures)
-                )
+        if repo_type != "apt":
+            raise RuntimeError(
+                f"invalid deb repository object: {data!r} (invalid type)"
             )
-            or (
-                not isinstance(components, list)
-                or not all(isinstance(x, str) for x in components)
-            )
-            or (
-                deb_types is not None
-                and any(deb_type not in ["deb", "deb-src"] for deb_type in deb_types)
-            )
-            or not isinstance(key_id, str)
-            or (key_server is not None and not isinstance(key_server, str))
-            or not isinstance(name, str)
-            or (
-                not isinstance(suites, list)
-                or not all(isinstance(x, str) for x in suites)
-            )
-            or not isinstance(url, str)
+
+        if architectures is not None and (
+            not isinstance(architectures, list)
+            or not all(isinstance(x, str) for x in architectures)
         ):
-            raise RuntimeError(f"invalid deb repository object: {data!r}")
+            raise RuntimeError(
+                f"invalid deb repository object: {data!r} (invalid architectures)"
+            )
+
+        if not isinstance(components, list) or not all(
+            isinstance(x, str) for x in components
+        ):
+            raise RuntimeError(
+                f"invalid deb repository object: {data!r} (invalid components)"
+            )
+
+        if deb_types is not None and any(
+            deb_type not in ["deb", "deb-src"] for deb_type in deb_types
+        ):
+            raise RuntimeError(
+                f"invalid deb repository object: {data!r} (invalid deb-types)"
+            )
+
+        if not isinstance(key_id, str):
+            raise RuntimeError(
+                f"invalid deb repository object: {data!r} (invalid key-id)"
+            )
+
+        if key_server is not None and not isinstance(key_server, str):
+            raise RuntimeError(
+                f"invalid deb repository object: {data!r} (invalid key-server)"
+            )
+
+        if not isinstance(name, str):
+            raise RuntimeError(
+                f"invalid deb repository object: {data!r} (invalid name)"
+            )
+
+        if not isinstance(suites, list) or not all(isinstance(x, str) for x in suites):
+            raise RuntimeError(
+                f"invalid deb repository object: {data!r} (invalid suites)"
+            )
+
+        if not isinstance(url, str):
+            raise RuntimeError(f"invalid deb repository object: {data!r} (invalid url)")
 
         if data_copy:
             raise RuntimeError(f"invalid deb repository object: {data!r} (extra keys)")
