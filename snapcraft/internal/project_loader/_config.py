@@ -213,6 +213,10 @@ class Config:
             self.data.get("architectures"), project.deb_arch
         )
 
+        # XXX: Resetting snap_meta due to above mangling of data.
+        # Convergence to operating on snap_meta will remove this requirement...
+        project._snap_meta = Snap.from_dict(self.data)
+
         self._ensure_no_duplicate_app_aliases()
 
         grammar_processor = grammar_processing.GlobalGrammarProcessor(
