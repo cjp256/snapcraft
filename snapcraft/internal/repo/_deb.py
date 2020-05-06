@@ -38,14 +38,17 @@ from snapcraft.internal import os_release
 from snapcraft.internal.indicators import is_dumb_terminal
 
 from . import errors
-from .apt_cache import AptCache
+from .apt_cache import DebPackage, AptCache
+from .apt_stage_cache_db import AptStageCacheDb
 from ._base import BaseRepo, get_pkg_name_parts
 
 
 logger = logging.getLogger(__name__)
 
-_DEB_CACHE_DIR: Path = Path(BaseDirectory.save_cache_path("snapcraft", "download"))
-_STAGE_CACHE_DIR: Path = Path(
+_DEB_CACHE_DIR: Final[Path] = Path(
+    BaseDirectory.save_cache_path("snapcraft", "download")
+)
+_STAGE_CACHE_DIR: Final[Path] = Path(
     BaseDirectory.save_cache_path("snapcraft", "stage-packages")
 )
 
@@ -405,38 +408,81 @@ class Ubuntu(BaseRepo):
             )
 
     @classmethod
+    def _fetch_stage_packages(
+        cls, *, package_names: Set[str], filtered_names: Set[str]
+    ) -> List[DebPackage]:
+        logger.debug(f"Requested stage-packages: {sorted(package_names)!r}")
+        with AptCache(stage_cache=_STAGE_CACHE_DIR) as apt_cache:
+            apt_cache.update()
+            apt_cache.mark_packages(package_names)
+            apt_cache.unmark_packages(
+                required_names=package_names, filtered_names=filtered_names
+            )
+            return apt_cache.fetch_archives(_DEB_CACHE_DIR)
+
+    @classmethod
+    def _query_stage_packages_db(
+        cls, *, package_names: Set[str], filtered_names: Set[str]
+    ) -> Optional[List[DebPackage]]:
+        db = AptStageCacheDb(stage_cache=_STAGE_CACHE_DIR)
+        return db.find(package_names=package_names, filtered_names=filtered_names)
+
+    @classmethod
+    def _insert_stage_packages_db(
+        cls,
+        *,
+        package_names: Set[str],
+        filtered_names: Set[str],
+        packages: List[DebPackage],
+    ) -> None:
+        db = AptStageCacheDb(stage_cache=_STAGE_CACHE_DIR)
+        db.insert(
+            package_names=package_names,
+            filtered_names=filtered_names,
+            packages=packages,
+        )
+
+    @classmethod
     def install_stage_packages(
         cls, *, package_names: List[str], install_dir: str, base: str
     ) -> List[str]:
         logger.debug(f"Requested stage-packages: {sorted(package_names)!r}")
+        filtered_names = set(get_packages_in_base(base=base))
 
-        installed: Set[str] = set()
-
-        with AptCache(stage_cache=_STAGE_CACHE_DIR) as apt_cache:
-            filter_packages = set(get_packages_in_base(base=base))
-            apt_cache.update()
-            apt_cache.mark_packages(set(package_names))
-            apt_cache.unmark_packages(
-                required_names=set(package_names), filtered_names=filter_packages
+        # Check snapcraft cache if we've already processed this request
+        # successfully.  This dramatically improves performance for
+        # re-running snapcraft.
+        packages = cls._query_stage_packages_db(
+            package_names=set(package_names), filtered_names=filtered_names
+        )
+        if packages is not None:
+            logger.debug(f"Using cached stage-packages {sorted(package_names)!r}")
+        else:
+            packages = cls._fetch_stage_packages(
+                package_names=set(package_names), filtered_names=filtered_names
             )
-            for pkg_name, pkg_version, dl_path in apt_cache.fetch_archives(
-                _DEB_CACHE_DIR
-            ):
-                logger.debug(f"Extracting stage package: {pkg_name}")
-                installed.add(f"{pkg_name}={pkg_version}")
-                with tempfile.TemporaryDirectory(suffix="deb-extract") as extract_dir:
-                    # Extract deb package.
-                    cls._extract_deb(str(dl_path), extract_dir)
+            # Add results to db.
+            cls._insert_stage_packages_db(
+                package_names=set(package_names),
+                filtered_names=filtered_names,
+                packages=packages,
+            )
 
-                    # Mark source of files.
-                    marked_name = f"{pkg_name}={pkg_version}"
-                    cls._mark_origin_stage_package(extract_dir, marked_name)
+        for pkg in packages:
+            logger.debug(f"Extracting stage package: {pkg.name}")
+            with tempfile.TemporaryDirectory(suffix="deb-extract") as extract_dir:
+                # Extract deb package.
+                cls._extract_deb(str(pkg.path), extract_dir)
 
-                    # Stage files to install_dir.
-                    file_utils.link_or_copy_tree(extract_dir, install_dir)
+                # Mark source of files.
+                marked_name = f"{pkg.name}={pkg.version}"
+                cls._mark_origin_stage_package(extract_dir, marked_name)
+
+                # Stage files to install_dir.
+                file_utils.link_or_copy_tree(extract_dir, install_dir)
 
         cls.normalize(install_dir)
-        return sorted(installed)
+        return sorted([f"{pkg.name}={pkg.version}" for pkg in packages])
 
     @classmethod
     def build_package_is_valid(cls, package_name) -> bool:

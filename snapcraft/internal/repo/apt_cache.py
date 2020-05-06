@@ -21,7 +21,8 @@ import re
 import shutil
 from contextlib import ContextDecorator
 from pathlib import Path
-from typing import Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Set, Tuple
+
 
 from snapcraft.internal import common
 from snapcraft.internal.indicators import is_dumb_terminal
@@ -32,6 +33,23 @@ logger = logging.getLogger(__name__)
 
 
 _HASHSUM_MISMATCH_PATTERN = re.compile(r"(E:Failed to fetch.+Hash Sum mismatch)+")
+
+
+class DebPackage:
+    def __init__(self, *, name: str, version: str, path: Path) -> None:
+        self.name = name
+        self.version = version
+        self.path = path
+
+    def __eq__(self, other: Any) -> bool:
+        if not isinstance(other, DebPackage):
+            return False
+
+        return (
+            other.name == self.name
+            and other.version == self.version
+            and other.path == self.path
+        )
 
 
 class AptCache(ContextDecorator):
@@ -146,17 +164,23 @@ class AptCache(ContextDecorator):
                 return self.cache[package_name].installed.version
         return None
 
-    def fetch_archives(self, download_path: Path) -> List[Tuple[str, str, Path]]:
+    def fetch_archives(self, download_path: Path) -> List[DebPackage]:
         """Fetches archives, list of (<package-name>, <package-version>, <dl-path>)."""
-        downloaded = list()
+        packages: List[DebPackage] = list()
         for package in self.cache.get_changes():
             try:
                 dl_path = package.candidate.fetch_binary(str(download_path))
             except apt.package.FetchError as e:
                 raise errors.PackageFetchError(str(e))
 
-            downloaded.append((package.name, package.candidate.version, Path(dl_path)))
-        return downloaded
+            packages.append(
+                DebPackage(
+                    name=package.name,
+                    version=package.candidate.version,
+                    path=Path(dl_path),
+                )
+            )
+        return packages
 
     def get_installed_packages(self) -> Dict[str, str]:
         installed: Dict[str, str] = dict()

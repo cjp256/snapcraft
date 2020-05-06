@@ -48,8 +48,21 @@ class TestPackages(unit.TestCase):
         self.debs_path = Path(self.path, "debs")
         self.debs_path.mkdir(parents=True, exist_ok=False)
 
-        repo._deb._DEB_CACHE_DIR = self.debs_path
-        repo._deb._STAGE_CACHE_DIR = self.stage_cache_path
+        self.useFixture(
+            fixtures.MockPatch(
+                "snapcraft.internal.repo._deb._DEB_CACHE_DIR", new=self.debs_path
+            )
+        )
+        self.useFixture(
+            fixtures.MockPatch(
+                "snapcraft.internal.repo._deb._STAGE_CACHE_DIR",
+                new=self.stage_cache_path,
+            )
+        )
+        self.fake_db = self.useFixture(
+            fixtures.MockPatch("snapcraft.internal.repo._deb.AptStageCacheDb")
+        ).mock.return_value
+        self.fake_db.find.return_value = None
 
         @contextlib.contextmanager
         def fake_tempdir(*, suffix: str, **kwargs):
@@ -65,8 +78,11 @@ class TestPackages(unit.TestCase):
         ).mock
 
     def test_install_stage_packages(self):
+        deb_pkg = repo.apt_cache.DebPackage(
+            name="fake-package", version="1.0", path=Path(self.path)
+        )
         self.fake_apt_cache.return_value.__enter__.return_value.fetch_archives.return_value = [
-            ("fake-package", "1.0", Path(self.path))
+            deb_pkg
         ]
 
         installed_packages = repo.Ubuntu.install_stage_packages(
@@ -89,11 +105,30 @@ class TestPackages(unit.TestCase):
             ]
         )
 
+        self.assertThat(
+            self.fake_db.mock_calls,
+            Equals(
+                [
+                    call.find(
+                        package_names={"fake-package"},
+                        filtered_names=set(repo._deb._DEFAULT_FILTERED_STAGE_PACKAGES),
+                    ),
+                    call.insert(
+                        package_names={"fake-package"},
+                        filtered_names=set(repo._deb._DEFAULT_FILTERED_STAGE_PACKAGES),
+                        packages=[deb_pkg],
+                    ),
+                ]
+            ),
+        )
+
         self.assertThat(installed_packages, Equals(["fake-package=1.0"]))
 
     def test_install_virtual_stage_package(self):
         self.fake_apt_cache.return_value.__enter__.return_value.fetch_archives.return_value = [
-            ("fake-package", "1.0", Path(self.path))
+            repo.apt_cache.DebPackage(
+                name="fake-package", version="1.0", path=Path(self.path)
+            )
         ]
 
         installed_packages = repo.Ubuntu.install_stage_packages(
@@ -104,8 +139,12 @@ class TestPackages(unit.TestCase):
 
     def test_install_stage_package_with_deps(self):
         self.fake_apt_cache.return_value.__enter__.return_value.fetch_archives.return_value = [
-            ("fake-package", "1.0", Path(self.path)),
-            ("fake-package-dep", "2.0", Path(self.path)),
+            repo.apt_cache.DebPackage(
+                name="fake-package", version="1.0", path=Path(self.path)
+            ),
+            repo.apt_cache.DebPackage(
+                name="fake-package-dep", version="2.0", path=Path(self.path)
+            ),
         ]
 
         installed_packages = repo.Ubuntu.install_stage_packages(
@@ -130,6 +169,21 @@ class TestPackages(unit.TestCase):
             base="core",
         )
         self.assertThat(str(raised), Equals("Package fetch error: foo"))
+
+    def test_install_stage_package_cached(self):
+        self.fake_db.find.return_value = [
+            repo.apt_cache.DebPackage(
+                name="fake-package", version="1.0", path=Path(self.path)
+            )
+        ]
+
+        installed_packages = repo.Ubuntu.install_stage_packages(
+            package_names=["fake-package"], install_dir=self.path, base="core"
+        )
+
+        self.fake_apt_cache.assert_not_called()
+
+        self.assertThat(installed_packages, Equals(["fake-package=1.0"]))
 
 
 class TestSourcesFormatting(unit.TestCase):
