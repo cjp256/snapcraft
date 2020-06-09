@@ -18,6 +18,7 @@ import contextlib
 import importlib
 import logging
 import sys
+from pathlib import Path
 
 import jsonschema
 
@@ -74,11 +75,24 @@ def load_plugin(
     return plugin
 
 
+def _compat_load(module_name: str, local_plugin_dir: str):
+    compat_path = Path(local_plugin_dir, f"x-{module_name}.py")
+    if not compat_path.exists():
+        raise ModuleNotFoundError()
+
+    spec = importlib.util.spec_from_file_location(module_name, compat_path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _load_local(module_name: str, local_plugin_dir: str):
     sys.path = [local_plugin_dir] + sys.path
     logger.debug(f"Loading plugin module {module_name!r} with sys.path {sys.path!r}")
     try:
         module = importlib.import_module(module_name)
+    except ModuleNotFoundError:
+        module = _compat_load(module_name, local_plugin_dir)
     finally:
         sys.path.pop(0)
 
