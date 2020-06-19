@@ -261,6 +261,7 @@ class ExtensionImpl(Extension):
                     "libgstreamer-plugins-base1.0-0",
                     "libgstreamer-plugins-good1.0-0",
                     "libgstreamer1.0-0",
+                    "libgtk2.0-0",
                     "libgtk-3-0",
                     "libgudev-1.0-0",
                     "libgupnp-1.0-4",
