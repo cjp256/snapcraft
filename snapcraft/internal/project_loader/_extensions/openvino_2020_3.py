@@ -37,6 +37,8 @@ class ExtensionImpl(Extension):
     def __init__(self, *, extension_name: str, yaml_data: Dict[str, Any]) -> None:
         super().__init__(extension_name=extension_name, yaml_data=yaml_data)
 
+        toolkit_snap = "cjp256-openvino-toolkit-1804"
+
         self.root_snippet = {}
 
         self.app_snippet = {
@@ -57,7 +59,7 @@ class ExtensionImpl(Extension):
                 "OpenCV_DIR": "$SNAP/openvino/opencv/cmake",
                 "PATH": "$SNAP/openvino/deployment_tools/model_optimizer:$SNAP/openvino/data_processing/gstreamer/bin:$SNAP/openvino/data_processing/gstreamer/bin/gstreamer-1.0:$PATH",
                 "PKG_CONFIG_PATH": "$SNAP/openvino/data_processing/dl_streamer/lib/pkgconfig:$SNAP/openvino/data_processing/gstreamer/lib/pkgconfig:",
-                "PYTHONPATH": "$SNAP/openvino/python/python3.6:$SNAP/openvino/python/python3:$SNAP/openvino/deployment_tools/open_model_zoo/tools/accuracy_checker:$SNAP/openvino/deployment_tools/model_optimizer:$SNAP/openvino/data_processing/dl_streamer/python:$SNAP/openvino/data_processing/gstreamer/lib/python3.6/site-packages:",
+                "PYTHONPATH": "$SNAP/openvino/opencv/lib/python3.6/site-packages:$SNAP/openvino/python/python3.6:$SNAP/openvino/python/python3:$SNAP/openvino/deployment_tools/open_model_zoo/tools/accuracy_checker:$SNAP/openvino/deployment_tools/model_optimizer:$SNAP/openvino/data_processing/dl_streamer/python:$SNAP/openvino/data_processing/gstreamer/lib/python3.6/site-packages:",
                 #"ngraph_DIR": "$SNAP/openvino/deployment_tools/ngraph/cmake",
                 "ngraph_DIR": "$SNAP/openvino/cmake",
             },
@@ -75,7 +77,7 @@ class ExtensionImpl(Extension):
         self.part_snippet = {
             "build-environment": [
                 {
-                    "INTEL_OPENVINO_DIR": "/snap/openvino-toolkit/current/openvino"
+                    "INTEL_OPENVINO_DIR": f"/snap/{toolkit_snap}/current/openvino"
                 },
                 {
                     "GI_TYPELIB_PATH": "$INTEL_OPENVINO_DIR/data_processing/gstreamer/lib/girepository-1.0"
@@ -115,7 +117,7 @@ class ExtensionImpl(Extension):
                     "PKG_CONFIG_PATH": "$INTEL_OPENVINO_DIR/data_processing/dl_streamer/lib/pkgconfig:$INTEL_OPENVINO_DIR/data_processing/gstreamer/lib/pkgconfig:"
                 },
                 {
-                    "PYTHONPATH": "$INTEL_OPENVINO_DIR/python/python3.6:$INTEL_OPENVINO_DIR/python/python3:$INTEL_OPENVINO_DIR/deployment_tools/open_model_zoo/tools/accuracy_checker:$INTEL_OPENVINO_DIR/deployment_tools/model_optimizer:$INTEL_OPENVINO_DIR/data_processing/dl_streamer/python:$INTEL_OPENVINO_DIR/data_processing/gstreamer/lib/python3.6/site-packages:"
+                    "PYTHONPATH": "$INTEL_OPENVINO_DIR/opencv/lib/python3.6/site-packages:$INTEL_OPENVINO_DIR/python/python3.6:$INTEL_OPENVINO_DIR/python/python3:$INTEL_OPENVINO_DIR/deployment_tools/open_model_zoo/tools/accuracy_checker:$INTEL_OPENVINO_DIR/deployment_tools/model_optimizer:$INTEL_OPENVINO_DIR/data_processing/dl_streamer/python:$INTEL_OPENVINO_DIR/data_processing/gstreamer/lib/python3.6/site-packages:"
                 },
                 #{"ngraph_DIR": "$INTEL_OPENVINO_DIR/deployment_tools/ngraph/cmake"},
                 {"ngraph_DIR": "$INTEL_OPENVINO_DIR/cmake"},
@@ -128,7 +130,7 @@ class ExtensionImpl(Extension):
                 # "source": "http://registrationcenter-download.intel.com/akdlm/irc_nas/16670/l_openvino_toolkit_p_2020.3.194.tgz",
                 # "override-build": "./install.sh --accept_eula --silent --install_dir $SNAPCRAFT_PART_INSTALL/openvino-toolkit",
                 "plugin": "nil",
-                # "build-snaps": ["openvino-sdk"],
+                "build-snaps": [f"{toolkit_snap}/latest/edge"],
                 "build-packages": [
                     "libbison-dev",
                     "libdrm-dev",
@@ -398,10 +400,10 @@ class ExtensionImpl(Extension):
                     "x11-common",
                     "xorg-sgml-doctools",
                 ],
-                "override-build": """
+                "override-build": f"""
                     snapcraftctl build
                     mkdir -p $SNAPCRAFT_PART_INSTALL/openvino
-                    cp -r /snap/openvino-toolkit/current/openvino/* $SNAPCRAFT_PART_INSTALL/openvino/
+                    cp -rv /snap/{toolkit_snap}/current/openvino/* $SNAPCRAFT_PART_INSTALL/openvino/
                 """,
             }
         }
