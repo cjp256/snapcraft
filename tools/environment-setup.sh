@@ -2,6 +2,9 @@
 
 set -e
 
+CONTAINER_NAME=${CONTAINER_NAME:-snapcraft-dev}
+IMAGE_NAME=${IMAGE_NAME:-ubuntu:18.04}
+
 # Check if we are in snapcraft sources
 if [ ! -f snap/snapcraft.yaml ]; then
     echo "This tool is meant to be run from the root of the snapcraft source tree."
@@ -14,23 +17,23 @@ if ! grep -q '^name: snapcraft$' snap/snapcraft.yaml; then
 fi
 
 # Create the container
-if ! lxc info snapcraft-dev >/dev/null 2>&1; then
-    lxc init ubuntu:18.04 snapcraft-dev
+if ! lxc info $CONTAINER_NAME >/dev/null 2>&1; then
+    lxc init $IMAGE_NAME $CONTAINER_NAME
 fi
-if ! lxc config get snapcraft-dev raw.idmap | grep -q "both $UID 1000"; then
-    lxc config set snapcraft-dev raw.idmap "both $UID 1000"
+if ! lxc config get $CONTAINER_NAME raw.idmap | grep -q "both $UID 1000"; then
+    lxc config set $CONTAINER_NAME raw.idmap "both $UID 1000"
 fi
 
-if ! lxc info snapcraft-dev | grep -q "Status: Running"; then
-    lxc start snapcraft-dev
+if ! lxc info $CONTAINER_NAME | grep -q "Status: Running"; then
+    lxc start $CONTAINER_NAME
 fi
 
 # Wait for cloud-init before moving on
-lxc exec snapcraft-dev -- cloud-init status --wait
+lxc exec $CONTAINER_NAME -- cloud-init status --wait
 
 # Install apt dependencies
-lxc exec snapcraft-dev -- apt update
-lxc exec snapcraft-dev -- apt install --yes \
+lxc exec $CONTAINER_NAME -- apt update
+lxc exec $CONTAINER_NAME -- apt install --yes \
     execstack \
     g++ \
     gcc \
@@ -50,32 +53,32 @@ lxc exec snapcraft-dev -- apt install --yes \
     squashfs-tools
 
 # Create a virtual environment and set it as default 
-lxc exec snapcraft-dev -- sudo -iu ubuntu python3 -m venv .venv/snapcraft
-lxc exec snapcraft-dev -- sudo -iu ubuntu bash -c \
+lxc exec $CONTAINER_NAME -- sudo -iu ubuntu python3 -m venv .venv/snapcraft
+lxc exec $CONTAINER_NAME -- sudo -iu ubuntu bash -c \
     "echo 'source /home/ubuntu/.venv/snapcraft/bin/activate' >> .profile"
-lxc exec snapcraft-dev -- sudo -iu ubuntu bash -c \
+lxc exec $CONTAINER_NAME -- sudo -iu ubuntu bash -c \
     "echo 'source /home/ubuntu/.venv/snapcraft/bin/activate' >> .bashrc"
-lxc exec snapcraft-dev -- sudo -iu ubuntu pip install --upgrade pip wheel
+lxc exec $CONTAINER_NAME -- sudo -iu ubuntu pip install --upgrade pip wheel
 
 # Now that /home/ubuntu has been used, add the project
-if ! lxc config device show snapcraft-dev | grep -q snapcraft-project; then
-    lxc config device add snapcraft-dev snapcraft-project disk \
+if ! lxc config device show $CONTAINER_NAME | grep -q snapcraft-project; then
+    lxc config device add $CONTAINER_NAME snapcraft-project disk \
         source="$PWD" path=/home/ubuntu/snapcraft
 fi
 
 # Install python dependencies
-lxc exec snapcraft-dev -- sudo -iu ubuntu pip install \
+lxc exec $CONTAINER_NAME -- sudo -iu ubuntu pip install \
     -r snapcraft/requirements.txt \
     -r snapcraft/requirements-devel.txt
 
 # Install the project for quick tests
-lxc exec snapcraft-dev -- sudo -iu ubuntu pip install --editable snapcraft
+lxc exec $CONTAINER_NAME -- sudo -iu ubuntu pip install --editable snapcraft
 
 # Install black to run static tests.
-lxc exec snapcraft-dev -- snap install black --beta
+lxc exec $CONTAINER_NAME -- snap install black --beta
 
 # Install shellcheck for static tests.
-lxc exec snapcraft-dev -- snap install shellcheck
+lxc exec $CONTAINER_NAME -- snap install shellcheck
 
 echo "Environment ready, enter it by running: "
-echo "lxc exec snapcraft-dev -- sudo -iu ubuntu bash"
+echo "lxc exec $CONTAINER_NAME -- sudo -iu ubuntu bash"
