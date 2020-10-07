@@ -1,0 +1,85 @@
+name: CI
+
+on: [pull_request, push]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Snapcraft
+        uses: actions/checkout@v2
+        with:
+          # Fetch all of history so Snapcraft can determine its own version from git.
+          fetch-depth: 0
+
+      - name: Build Snapcraft Snap
+        id: build-snapcraft
+        uses: snapcore/action-build@v1
+
+      - name: Upload Snapcraft Snap
+        uses: actions/upload-artifact@v2
+        with:
+          name: snap
+          path: ${{ steps.build-snapcraft.outputs.snap }}
+
+      - name: Verify Snapcraft Snap
+        run: |
+          # Make sure it is installable.
+          sudo snap install --dangerous --classic ${{ steps.build-snapcraft.outputs.snap }}
+
+  integration-spread-tests-using-lxd:
+    runs-on: ubuntu-latest
+    needs: build
+
+    strategy:
+      matrix:
+        spread-jobs:
+          - lxd:ubuntu-16.04
+          - lxd:ubuntu-18.04
+          - lxd:ubuntu-20.04
+
+    steps:
+      - name: Checkout Snapcraft
+        uses: actions/checkout@v2
+        with:
+          # Fetch all of history so Snapcraft can determine its own version from git.
+          fetch-depth: 0
+
+      - name: Install Snapd
+        run: |
+          set -x
+          sudo chown root:root /
+          sudo apt update
+          sudo apt install -y snapd
+          sudo snap wait system seed.loaded
+          sudo snap install snapd
+          sudo snap wait system seed.loaded
+
+      - name: Install LXD
+        run: |
+          set -x
+          sudo apt remove -y lxd lxd-client
+          sudo groupadd --force --system lxd
+          sudo usermod --append --groups lxd $USER
+          sudo snap install lxd
+          sudo lxd waitready --timeout=30
+          sudo lxd init --auto
+          sudo snap start lxd
+          newgrp lxd && id
+          snap services
+          id
+          ls -al /var/snap/lxd/common/lxd/unix.socket
+          sudo cat /etc/passwd
+          sudo cat /etc/group
+
+      - name: Download Snapcraft Snap
+        id: download
+        uses: actions/download-artifact@v2
+        with:
+          name: snap
+
+      - name: Run spread
+        run: |
+          set -x
+          sudo ./runtests.sh spread ${{ matrix.spread-jobs }}
