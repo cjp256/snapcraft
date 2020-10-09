@@ -27,3 +27,41 @@ jobs:
         run: |
           # Make sure it is installable.
           sudo snap install --dangerous --classic ${{ steps.build-snapcraft.outputs.snap }}
+
+  integration-spread-tests:
+    runs-on: ubuntu-latest
+    needs: build
+
+    strategy:
+      matrix:
+        spread-instances:
+          - lxd:ubuntu-16.04
+          - lxd:ubuntu-18.04
+          - lxd:ubuntu-20.04
+
+    steps:
+      - name: Install Snapd
+        run: |
+          sudo chown root:root /
+          sudo apt update
+          sudo apt install -y snapd
+          sudo snap wait system seed.loaded
+
+      - name: Install LXD
+        run: |
+          sudo apt remove -y lxd lxd-client
+          sudo groupadd --force --system lxd
+          sudo usermod --append --groups lxd $USER
+          sudo snap install lxd
+          sudo lxd waitready --timeout=30
+          sudo lxd init --auto
+
+      - name: Download Snapcraft Snap
+        id: download
+        uses: actions/download-artifact@v2
+        with:
+          name: snap
+
+      - name: Run spread
+        run: |
+          ./runtests.sh spread ${{ matrix.spread-instances }}
