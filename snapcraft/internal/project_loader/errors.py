@@ -14,6 +14,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import pathlib
+
 import snapcraft.internal.errors
 
 
@@ -119,3 +121,14 @@ class SnapcraftAfterPartMissingError(ProjectLoaderError):
 
     def __init__(self, part_name, after_part_name):
         super().__init__(part_name=part_name, after_part_name=after_part_name)
+
+
+class ProjectUnusedKeyAsset(snapcraft.internal.errors.SnapcraftException):
+    def __init__(self, key_path: pathlib.Path):
+        self.key_path = key_path
+
+    def get_brief(self) -> str:
+        return "Found unused key asset {self.key_path!r}."
+
+    def get_resolution(self) -> str:
+        return "You can remove any unused keys."

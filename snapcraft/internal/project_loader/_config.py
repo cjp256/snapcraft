@@ -30,6 +30,7 @@ from snapcraft.internal.meta.snap import Snap
 from snapcraft.internal.pluginhandler._part_environment import (
     get_snapcraft_global_environment,
 )
+from snapcraft.internal.repo import apt_key_manager, apt_sources_manager
 from snapcraft.project._schema import Validator
 
 from . import errors, grammar_processing, replace_attr
@@ -254,24 +255,37 @@ class Config:
 
         return package_repos
 
-    def install_package_repositories(self) -> None:
-        package_repos = self._get_required_package_repositories()
-        if not package_repos:
-            return
+    def _install_required_package_repositories(self) -> None:
+        refresh_required = False
+        key_assets = self.project._get_keys_path()
 
         # Install pre-requisite packages for apt-key, if not installed.
         repo.Repo.install_build_packages(package_names=["gnupg", "dirmngr"])
 
-        keys_path = self.project._get_keys_path()
-        changes = [
-            package_repo.install(keys_path=keys_path) for package_repo in package_repos
-        ]
-        if any(changes):
+        key_manager = apt_key_manager.AptKeyManager(key_assets=key_assets)
+
+        sources_manager = apt_sources_manager.AptSourcesManager()
+
+        for package_repo in self._get_required_package_repositories():
+            refresh_required |= key_manager.install_package_repository_key(
+                package_repo=package_repo
+            )
+            refresh_required |= sources_manager.install_package_repository_sources(
+                package_repo=package_repo
+            )
+
+        if refresh_required:
             repo.Repo.refresh_build_packages()
 
+        # Verify all key assets are installed.
+        for key_asset in key_assets.glob("*"):
+            key = key_asset.read_text()
+            for key_id in key_manager.get_key_fingerprints(key=key):
+                if not key_manager.is_key_installed(key_id=key_id):
+                    raise errors.ProjectUnusedKeyAsset(key_path=key_asset)
+
     def get_build_packages(self) -> Set[str]:
-        # Install/update configured package repositories.
-        self.install_package_repositories()
+        self._install_required_package_repositories()
 
         build_packages = self._global_grammar_processor.get_build_packages()
         build_packages |= set(self.project.additional_build_packages)

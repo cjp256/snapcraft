@@ -18,10 +18,7 @@ import abc
 import logging
 import re
 from copy import deepcopy
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Type
-
-from snapcraft.internal.repo._deb import Ubuntu
+from typing import Any, Dict, List, Optional
 
 from . import errors
 
@@ -29,10 +26,6 @@ logger = logging.getLogger(__name__)
 
 
 class PackageRepository(abc.ABC):
-    @abc.abstractmethod
-    def install(self, *, keys_path: Path) -> bool:
-        ...
-
     @abc.abstractmethod
     def marshal(self) -> Dict[str, Any]:
         ...
@@ -63,15 +56,11 @@ class PackageRepository(abc.ABC):
 
 
 class PackageRepositoryAptPpa(PackageRepository):
-    def __init__(self, *, ppa: str, apt_repo: Type[Ubuntu] = Ubuntu) -> None:
+    def __init__(self, *, ppa: str) -> None:
         self.type = "apt"
         self.ppa = ppa
-        self._apt_repo = apt_repo
 
         self.validate()
-
-    def install(self, *, keys_path: Path) -> bool:
-        return self._apt_repo.install_ppa(keys_path=keys_path, ppa=self.ppa)
 
     def marshal(self) -> Dict[str, Any]:
         data = dict(type="apt")
@@ -137,7 +126,6 @@ class PackageRepositoryApt(PackageRepository):
         path: Optional[str] = None,
         suites: Optional[List[str]] = None,
         url: str,
-        apt_repo: Type[Ubuntu] = Ubuntu,
     ) -> None:
         self.type = "apt"
         self.architectures = architectures
@@ -156,40 +144,7 @@ class PackageRepositoryApt(PackageRepository):
         self.suites = suites
         self.url = url
 
-        self._apt_repo = apt_repo
-
         self.validate()
-
-    def install(self, keys_path: Path) -> bool:
-        if not self.path and not self.components and not self.suites:
-            suites = ["/"]
-        elif self.path:
-            # Suites denoting exact path must end with '/'.
-            path = self.path
-            if not path.endswith("/"):
-                path = path + "/"
-            suites = [path]
-        elif self.suites:
-            suites = self.suites
-        else:
-            raise RuntimeError("no suites or path")
-
-        # First install associated GPG key.
-        new_key: bool = self._apt_repo.install_gpg_key_id(
-            keys_path=keys_path, key_id=self.key_id, key_server=self.key_server
-        )
-
-        # Now install sources file.
-        new_sources: bool = self._apt_repo.install_sources(
-            architectures=self.architectures,
-            components=self.components,
-            formats=self.formats,
-            name=self.name,
-            suites=suites,
-            url=self.url,
-        )
-
-        return new_key or new_sources
 
     def marshal(self) -> Dict[str, Any]:
         data: Dict[str, Any] = {"type": "apt"}

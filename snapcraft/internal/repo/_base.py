@@ -24,13 +24,12 @@ import pathlib
 import re
 import shutil
 import stat
-
 from typing import List, Optional, Set
 
 from snapcraft import file_utils
 from snapcraft.internal import mangling, xattrs
-from . import errors
 
+from . import errors
 
 logger = logging.getLogger(__name__)
 
@@ -178,11 +177,6 @@ class BaseRepo:
         cls, *, stage_packages_path: pathlib.Path, install_path: pathlib.Path
     ) -> None:
         """Unpack stage packages to install_path."""
-        raise errors.NoNativeBackendError()
-
-    @classmethod
-    def install_gpg_key(cls, *, key_id: str, key: str) -> bool:
-        """Install trusted GPG key."""
         raise errors.NoNativeBackendError()
 
     @classmethod
