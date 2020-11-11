@@ -40,6 +40,12 @@ jobs:
           - lxd:ubuntu-20.04
 
     steps:
+      - name: Checkout Snapcraft
+        uses: actions/checkout@v2
+        with:
+          # Fetch all of history so Snapcraft can determine its own version from git.
+          fetch-depth: 0
+
       - name: Install Snapd
         run: |
           sudo chown root:root /
