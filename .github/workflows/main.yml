@@ -53,8 +53,10 @@ jobs:
           sudo apt update
           sudo apt install -y snapd
           sudo snap wait system seed.loaded
+          sudo systemctl status snapd
           sudo snap install snapd
           sudo snap wait system seed.loaded
+          sudo systemctl status snapd
 
       - name: Install LXD
         run: |
