@@ -70,4 +70,5 @@ jobs:
 
       - name: Run spread
         run: |
+          newgrp lxd
           ./runtests.sh spread ${{ matrix.spread-instances }}
