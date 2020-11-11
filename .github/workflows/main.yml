@@ -79,7 +79,7 @@ jobs:
         run: |
           set -x
           newgrp lxd
-          lxc info
+          snap services
           id
           ls -al /var/snap/lxd/common/lxd/unix.socket
           ./runtests.sh spread ${{ matrix.spread-instances }}
