@@ -35,9 +35,12 @@ backends:
   lxd:
     systems:
       # -native is added for clarity and for ubuntu-20.04* to match.
-      - ubuntu-16.04
-      - ubuntu-18.04
-      - ubuntu-20.04
+      - ubuntu-16.04:
+          workers: 2
+      - ubuntu-18.04:
+          workers: 2
+      - ubuntu-20.04:
+          workers: 2
   google:
     location: computeengine/us-east1-b
     systems:
