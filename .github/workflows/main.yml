@@ -82,4 +82,4 @@ jobs:
       - name: Run spread
         run: |
           set -x
-          sudo ./runtests.sh spread ${{ matrix.spread-instances }}
+          sudo ./runtests.sh spread ${{ matrix.spread-jobs }}
