@@ -20,7 +20,7 @@ import os
 import shutil
 import time
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence, Type
 from urllib.parse import unquote, urlsplit
 
 import requests
@@ -90,8 +90,10 @@ class LaunchpadClient:
         core18_channel: str = "stable",
         snapcraft_channel: str = "stable",
         deadline: int = 0,
+        git_class: Type[Git] = Git,
     ) -> None:
-        if not Git.check_command_installed():
+        self._git_class = git_class
+        if not self._git_class.check_command_installed():
             raise errors.GitNotFoundProviderError(provider="Launchpad")
 
         self._snap_name = project.info.name
@@ -438,7 +440,7 @@ class LaunchpadClient:
 
         :return: Git handler instance to git repository.
         """
-        git_handler = Git(repo_dir, repo_dir, silent=True)
+        git_handler = self._git_class(repo_dir, repo_dir, silent=True)
 
         # Init repo.
         git_handler.init()
