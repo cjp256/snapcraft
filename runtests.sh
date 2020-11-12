@@ -19,36 +19,12 @@ set -e
 
 usage() {
     echo "Usage: "
-    echo "    ./runtests.sh static"
     echo "    ./runtests.sh tests/unit [<use-run>]"
     echo "    ./runtests.sh tests/integration[/<test-suite>]"
     echo "    ./runtests.sh spread"
     echo ""
     echo "<test-suite> can be one of: $(find tests/integration/ -mindepth 1 -maxdepth 1 -type d ! -name __pycache__ | tr '\n' ' ')"
     echo "<use-run> makes use of run instead of discover to run the tests"
-}
-
-run_static_tests() {
-    echo "Running black"
-    black --check --diff .
-
-    echo "Running flake8"
-    python3 -m flake8 .
-
-    echo "Running mypy"
-    mypy .
-
-    echo "Running codespell"
-    codespell -q4 -L keyserver \
-      -S "*.tar,*.xz,*.zip,*.bz2,*.7z,*.gz,*.deb,*.rpm,*.snap,*.gpg,*.pyc,*.png,*.ico,*.jar,changelog,.git,.hg,.mypy_cache,.tox,.venv,_build,buck-out,__pycache__,build,dist,.vscode,parts,stage,prime,test_appstream.py,./snapcraft.spec,./.direnv"
-
-    echo "Running shellcheck"
-    # Need to skip 'demos/gradle/gradlew' as it wasn't written by us and has
-    # tons of issues.
-    find . \( -name .git -o -name gradlew \) -prune -o -print0 | xargs -0 file -N | awk -F": " '$2~/shell.script/{print $1}' | xargs shellcheck
-
-    echo "Running shellcheck inside spread yaml"
-    ./tools/spread-shellcheck.py spread.yaml tests/spread/
 }
 
 run_snapcraft_tests(){
@@ -81,9 +57,7 @@ fi
 test_suite=$1
 shift
 
-if [[ "$test_suite" == "static" ]]; then
-    run_static_tests
-elif [[ "$test_suite" == "spread" ]]; then
+if [[ "$test_suite" == "spread" ]]; then
     run_spread "$@"
 elif [[ "$test_suite" == "-h" ]] || [[ "$test_suite" == "help" ]]; then
     usage

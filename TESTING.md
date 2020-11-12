@@ -66,7 +66,7 @@ Then, you'll need a few more dependencies:
 
 To run the static tests, execute:
 
-    ./runtests.sh static
+    make static-tests
 
 To run the unit tests, execute:
 
