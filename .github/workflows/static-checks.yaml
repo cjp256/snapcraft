@@ -1,0 +1,34 @@
+name: Static Tests
+on: [pull_request, push]
+
+jobs:
+  static-checks:
+    runs-on: ubuntu-18.04
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+      - name: Install dependencies
+        run: |
+          ./tools/environment-setup-local.sh
+      - name: Run black
+        run: |
+          source ${HOME}/.venv/snapcraft/bin/activate
+          make static-test-black
+      - name: Run codespell
+        run: |
+          source ${HOME}/.venv/snapcraft/bin/activate
+          make static-test-codespell
+      - name: Run flake8
+        run: |
+          source ${HOME}/.venv/snapcraft/bin/activate
+          make static-test-flake8
+      - name: Run mypy
+        run: |
+          source ${HOME}/.venv/snapcraft/bin/activate
+          make static-test-mypy
+      - name: Run shellcheck
+        run: |
+          source ${HOME}/.venv/snapcraft/bin/activate
+          make static-test-shellcheck
