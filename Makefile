@@ -1,3 +1,7 @@
+.PHONY: autoformat
+autoformat:
+	black .
+
 .PHONY: static-test-black
 static-test-black:
 	black --check --diff .
@@ -23,6 +27,6 @@ static-test-shellcheck:
 .PHONY: static-tests
 static-tests: static-test-black static-test-codespell static-test-flake8 static-test-mypy static-test-shellcheck
 
-.PHONY: autoformat-black
-autoformat-black:
-	black .
+.PHONY: unit-tests
+unit-tests:
+	pytest --cov-report=xml --cov=snapcraft tests/unit
