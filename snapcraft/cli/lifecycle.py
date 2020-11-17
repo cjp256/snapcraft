@@ -85,71 +85,59 @@ def _execute(  # noqa: C901
         kwargs.pop("target_arch")
 
     project = get_project(is_managed_host=is_managed_host, **kwargs)
+
+    # host
     conduct_project_sanity_check(project, **kwargs)
+    project_config = project_loader.load_config(project)
+    lifecycle.execute(step, project_config, parts)
+    if pack_project:
+        _pack(
+            project.prime_dir,
+            compression=project._snap_meta.compression,
+            output=output,
+        )
 
-    if build_provider in ["host", "managed-host"]:
-        project_config = project_loader.load_config(project)
-        lifecycle.execute(step, project_config, parts)
-        if pack_project:
-            _pack(
-                project.prime_dir,
-                compression=project._snap_meta.compression,
-                output=output,
-            )
-    else:
-        build_provider_class = build_providers.get_provider_for(build_provider)
+    # container
+    with build_provider_class(
+        project=project, echoer=echo, build_provider_flags=build_provider_flags
+    ) as instance:
+        instance.mount_project()
         try:
-            build_provider_class.ensure_provider()
-        except build_providers.errors.ProviderNotFound as provider_error:
-            if provider_error.prompt_installable:
-                if echo.is_tty_connected() and echo.confirm(
-                    "Support for {!r} needs to be set up. "
-                    "Would you like to do it now?".format(provider_error.provider)
-                ):
-                    build_provider_class.setup_provider(echoer=echo)
-                else:
-                    raise provider_error
+            if shell:
+                # shell means we want to do everything right up to the previous
+                # step and then go into a shell instead of the requested step.
+                # the "snap" target is a special snowflake that has not made its
+                # way to be a proper step.
+                previous_step = None
+                if pack_project:
+                    previous_step = steps.PRIME
+                elif step > steps.PULL:
+                    previous_step = step.previous_step()
+                # steps.PULL is the first step, so we would directly shell into it.
+                if previous_step:
+                    instance.execute_step(previous_step)
+            elif pack_project:
+                instance.pack_project(output=output)
+            elif setup_prime_try:
+                instance.expose_prime()
+                instance.execute_step(step)
             else:
-                raise provider_error
+                instance.execute_step(step)
+        except Exception:
+            _retrieve_provider_error(instance)
+            if project.debug:
+                instance.shell()
+            else:
+                echo.warning(
+                    "Run the same command again with --debug to shell into the environment "
+                    "if you wish to introspect this failure."
+                )
+                raise
+        else:
+            if shell or shell_after:
+                instance.shell()
 
-        with build_provider_class(
-            project=project, echoer=echo, build_provider_flags=build_provider_flags
-        ) as instance:
-            instance.mount_project()
-            try:
-                if shell:
-                    # shell means we want to do everything right up to the previous
-                    # step and then go into a shell instead of the requested step.
-                    # the "snap" target is a special snowflake that has not made its
-                    # way to be a proper step.
-                    previous_step = None
-                    if pack_project:
-                        previous_step = steps.PRIME
-                    elif step > steps.PULL:
-                        previous_step = step.previous_step()
-                    # steps.PULL is the first step, so we would directly shell into it.
-                    if previous_step:
-                        instance.execute_step(previous_step)
-                elif pack_project:
-                    instance.pack_project(output=output)
-                elif setup_prime_try:
-                    instance.expose_prime()
-                    instance.execute_step(step)
-                else:
-                    instance.execute_step(step)
-            except Exception:
-                _retrieve_provider_error(instance)
-                if project.debug:
-                    instance.shell()
-                else:
-                    echo.warning(
-                        "Run the same command again with --debug to shell into the environment "
-                        "if you wish to introspect this failure."
-                    )
-                    raise
-            else:
-                if shell or shell_after:
-                    instance.shell()
+    #
     return project
 
 
