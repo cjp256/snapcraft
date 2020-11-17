@@ -19,11 +19,16 @@ import os
 from datetime import datetime
 from pathlib import Path
 
+from snapcraft.internal import states
 from snapcraft.internal.deprecations import handle_deprecation_notice
 from snapcraft.internal.meta.snap import Snap
 from typing import Set
 from ._project_options import ProjectOptions
 from ._project_info import ProjectInfo  # noqa: F401
+from snapcraft.internal.project_loader._env import build_env_for_stage, environment_to_replacements, runtime_env
+from snapcraft.internal.pluginhandler._part_environment import (
+    get_snapcraft_global_environment,
+)
 
 
 class Project(ProjectOptions):
@@ -138,3 +143,57 @@ class Project(ProjectOptions):
     def _get_start_time(self) -> datetime:
         """Returns the timestamp for when a snapcraft project was loaded."""
         return self._start_time
+
+    def get_project_state(self, step: steps.Step):
+        """Returns a dict of states for the given step of each part."""
+
+        state = {}
+        for part in self.parts.all_parts:
+            state[part.name] = states.get_state(part.part_state_dir, step)
+
+        return state
+
+    def stage_env(self):
+        stage_dir = self.stage_dir
+        env = []
+
+        env += runtime_env(stage_dir, self.arch_triplet)
+        env += build_env_for_stage(
+            stage_dir, self.data["name"], self.arch_triplet
+        )
+        for part in self.parts.all_parts:
+            env += part.env(stage_dir)
+
+        return env
+
+    def snap_env(self):
+        prime_dir = self.project.prime_dir
+        env = []
+
+        env += runtime_env(prime_dir, self.arch_triplet)
+        dependency_paths = set()
+        for part in self.parts.all_parts:
+            env += part.env(prime_dir)
+            dependency_paths |= part.get_primed_dependency_paths()
+
+        # Dependency paths are only valid if they actually exist. Sorting them
+        # here as well so the LD_LIBRARY_PATH is consistent between runs.
+        dependency_paths = sorted(
+            {path for path in dependency_paths if os.path.isdir(path)}
+        )
+
+        if dependency_paths:
+            # Add more specific LD_LIBRARY_PATH from the dependencies.
+            env.append(
+                'LD_LIBRARY_PATH="' + ":".join(dependency_paths) + ':$LD_LIBRARY_PATH"'
+            )
+
+        return env
+
+    def project_env(self):
+        return [
+            '{}="{}"'.format(variable, value)
+            for variable, value in get_snapcraft_global_environment(
+                self
+            ).items()
+        ]

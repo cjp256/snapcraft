@@ -15,7 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
-from typing import Optional, List, Sequence, Set
+from typing import List, Optional, Sequence, Set
 
 from snapcraft import config, plugins, storeapi
 from snapcraft.internal import (
@@ -27,14 +27,56 @@ from snapcraft.internal import (
     states,
     steps,
 )
+from snapcraft.internal.meta._snap_packaging import create_snap_packaging
 from snapcraft.internal.pluginhandler._part_environment import (
     get_snapcraft_part_directory_environment,
 )
-from snapcraft.internal.meta._snap_packaging import create_snap_packaging
+from snapcraft.internal.project_loader._config import Config
+from snapcraft.project import Project
+
 from ._status_cache import StatusCache
 
-
 logger = logging.getLogger(__name__)
+
+
+def _get_build_packages(*, project: Project, project_config: Config) -> Set[str]:
+    build_packages = project_config.build_packages
+    build_packages |= set(project.additional_build_packages)
+
+    if project_config.version == "git":
+        build_packages.add("git")
+
+    for part in project_config.all_parts:
+        build_packages |= part._grammar_processor.get_build_packages()
+
+        # TODO: this should not pass in command but the required package,
+        #       where the required package is to be determined by the
+        #       source handler.
+        if part.source_handler and part.source_handler.command:
+            # TODO get_packages_for_source_type should not be a thing.
+            build_packages |= repo.Repo.get_packages_for_source_type(
+                part.source_handler.command
+            )
+
+        if not isinstance(part.plugin, plugins.v1.PluginV1):
+            build_packages |= part.plugin.get_build_packages()
+
+    return build_packages
+
+
+def _get_build_snaps(*, project_config: Config) -> Set[str]:
+    build_snaps = set()
+
+    # Add the base.
+    if project_config.base is not None:
+        build_snaps.add(project_config.base)
+
+    for part in project_config.all_parts:
+        build_snaps |= part._grammar_processor.get_build_snaps()
+        if not isinstance(part.plugin, plugins.v1.PluginV1):
+            build_snaps |= part.plugin.get_build_snaps()
+
+    return build_snaps
 
 
 def _get_required_grade(*, base: Optional[str], arch: str) -> str:
@@ -52,6 +94,23 @@ def _get_required_grade(*, base: Optional[str], arch: str) -> str:
         return "devel"
     else:
         return "stable"
+
+
+def _get_required_package_repositories(
+    *, project_config: Config
+) -> List[PackageRepository]:
+    """Get all required package repositories from plugins and parts."""
+    package_repos = project_config.package_repositories.copy()
+
+    v1_plugins = [
+        part.plugin
+        for part in project_config.all_parts
+        if isinstance(part.plugin, plugins.v1.PluginV1)
+    ]
+    for plugin in v1_plugins:
+        package_repos.extend(plugin.get_required_package_repositories())
+
+    return package_repos
 
 
 def _install_build_packages(build_packages: Set[str]) -> List[str]:
@@ -86,6 +145,23 @@ def _install_build_snaps(build_snaps: Set[str], content_snaps: Set[str]) -> List
     return installed_snaps
 
 
+def _install_package_repositories(*, project: Project, project_config: Config) -> None:
+    """Install all required package repositories."""
+    package_repos = _get_required_package_repositories(project_config=project_config)
+    if not package_repos:
+        return
+
+    # Install pre-requisite packages for apt-key, if not installed.
+    repo.Repo.install_build_packages(package_names=["gnupg", "dirmngr"])
+
+    keys_path = project._get_keys_path()
+    changes = [
+        package_repo.install(keys_path=keys_path) for package_repo in package_repos
+    ]
+    if any(changes):
+        repo.Repo.refresh_build_packages()
+
+
 def execute(
     step: steps.Step,
     project_config: "project_loader._config.Config",
@@ -110,9 +186,18 @@ def execute(
                           over.
     :returns: A dict with the snap name, version, type and architectures.
     """
+    # Install/update configured package repositories.
+    _install_package_repositories(
+        project=project_config.project, project_config=project_config
+    )
+
+    # Process build packages with grammar now that repositories are configured.
+    project_config.process_build_packages()
+
     installed_packages = _install_build_packages(project_config.get_build_packages())
     installed_snaps = _install_build_snaps(
-        project_config.get_build_snaps(), project_config.project._get_content_snaps()
+        _get_build_snaps(project_config=project_config),
+        project_config.project._get_content_snaps(),
     )
 
     try:

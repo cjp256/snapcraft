@@ -15,36 +15,30 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
-import os
 from collections import OrderedDict
 from copy import deepcopy
-from typing import Any, Dict, List, Set, Sequence, Optional
+from typing import Any, Dict, List, Optional, Sequence, Set
 
 from snapcraft import yaml_utils
-from snapcraft.internal import common
 from snapcraft.internal.meta import errors
 from snapcraft.internal.meta.application import Application
 from snapcraft.internal.meta.hooks import Hook
-from snapcraft.internal.meta.package_repository import PackageRepository
-from snapcraft.internal.meta.plugs import ContentPlug, Plug
-from snapcraft.internal.meta.slots import ContentSlot, Slot
+from snapcraft.internal.meta.plugs import Plug
+from snapcraft.internal.meta.slots import Slot
 from snapcraft.internal.meta.system_user import SystemUser
 
 logger = logging.getLogger(__name__)
 
 
-class Snap:
-    """Representation of snap meta object, writes snap.yaml."""
+class SnapYaml:
+    """Representation of meta/snap.yaml, writes snap.yaml."""
 
     def __init__(  # noqa: C901
         self,
-        adopt_info: Optional[str] = None,
         apps: Optional[Dict[str, Application]] = None,
         architectures: Optional[Sequence[str]] = None,
         assumes: Optional[Set[str]] = None,
         base: Optional[str] = None,
-        build_base: Optional[str] = None,
-        compression: Optional[str] = None,
         confinement: Optional[str] = None,
         description: Optional[str] = None,
         environment: Optional[Dict[str, Any]] = None,
@@ -54,8 +48,6 @@ class Snap:
         layout: Optional[Dict[str, Any]] = None,
         license: Optional[str] = None,
         name: Optional[str] = None,
-        package_repositories: Optional[List[PackageRepository]] = None,
-        passthrough: Optional[Dict[str, Any]] = None,
         plugs: Optional[Dict[str, Plug]] = None,
         slots: Optional[Dict[str, Slot]] = None,
         summary: Optional[str] = None,
@@ -64,8 +56,6 @@ class Snap:
         type: Optional[str] = None,
         version: Optional[str] = None,
     ) -> None:
-        self.adopt_info = adopt_info
-
         if apps is None:
             self.apps: Dict[str, Application] = dict()
         else:
@@ -82,8 +72,6 @@ class Snap:
             self.assumes = assumes
 
         self.base = base
-        self.build_base = build_base
-        self.compression = compression
         self.confinement = confinement
         self.description = description
 
@@ -108,16 +96,6 @@ class Snap:
         self.license = license
         self.name = name
 
-        if package_repositories is None:
-            self.package_repositories: List[PackageRepository] = list()
-        else:
-            self.package_repositories = package_repositories
-
-        if passthrough is None:
-            self.passthrough: Dict[str, Any] = dict()
-        else:
-            self.passthrough = passthrough
-
         if plugs is None:
             self.plugs: Dict[str, Plug] = dict()
         else:
@@ -140,80 +118,10 @@ class Snap:
         self.version = version
 
     @classmethod
-    def from_file(cls, snap_yaml_path: str) -> "Snap":
+    def from_file(cls, snap_yaml_path: str) -> "SnapYaml":
         with open(snap_yaml_path, "r") as f:
             snap_dict = yaml_utils.load(f)
-            return cls.from_dict(snap_dict=snap_dict)
-
-    @property
-    def is_passthrough_enabled(self) -> bool:
-        if self.passthrough:
-            return True
-
-        for app in self.apps.values():
-            if app.passthrough:
-                return True
-
-        for hook in self.hooks.values():
-            if hook.passthrough:
-                return True
-
-        return False
-
-    def get_build_base(self) -> str:
-        """
-        Return the base to use to create the snap.
-
-        Returns build-base if set, but if not, name is returned if the
-        snap is of type base. For all other snaps, the base is returned
-        as the build-base.
-        """
-        build_base: Optional[str] = None
-        if self.build_base is not None:
-            build_base = self.build_base
-        elif self.name is not None and self.type == "base":
-            build_base = self.name
-        else:
-            build_base = self.base
-
-        # The schema does not allow for this when loaded from snapcraft.yaml.
-        if build_base is None:
-            raise RuntimeError("'build_base' cannot be None")
-
-        return build_base
-
-    def get_content_plugs(self) -> List[ContentPlug]:
-        """Get list of content plugs."""
-        return [plug for plug in self.plugs.values() if isinstance(plug, ContentPlug)]
-
-    def get_content_slots(self) -> List[ContentSlot]:
-        """Get list of content slots."""
-        return [slot for slot in self.slots.values() if isinstance(slot, ContentSlot)]
-
-    def get_provider_content_directories(self) -> Set[str]:
-        """Get provider content directories from installed snaps."""
-        provider_dirs: Set[str] = set()
-
-        for plug in self.get_content_plugs():
-            # Get matching slot provider for plug.
-            provider = plug.provider
-            if not provider:
-                continue
-
-            provider_path = common.get_installed_snap_path(provider)
-            yaml_path = os.path.join(provider_path, "meta", "snap.yaml")
-
-            if not os.path.exists(yaml_path):
-                continue
-
-            snap = Snap.from_file(yaml_path)
-            for slot in snap.get_content_slots():
-                slot_installed_path = common.get_installed_snap_path(provider)
-                provider_dirs |= slot.get_content_dirs(
-                    installed_path=slot_installed_path
-                )
-
-        return provider_dirs
+            return cls.unmarshal(snap_dict=snap_dict)
 
     def _validate_required_keys(self) -> None:
         """Verify that all mandatory keys have been satisfied."""
@@ -222,7 +130,7 @@ class Snap:
         if not self.name:
             missing_keys.append("name")
 
-        if not self.version and not self.adopt_info:
+        if not self.version:
             missing_keys.append("version")
 
         if not self.summary:
@@ -253,13 +161,6 @@ class Snap:
         for user in self.system_usernames.values():
             user.validate()
 
-        if self.is_passthrough_enabled:
-            logger.warning(
-                "The 'passthrough' property is being used to "
-                "propagate experimental properties to snap.yaml "
-                "that have not been validated."
-            )
-
     def _ensure_command_chain_assumption(self) -> None:
         """Ensure command-chain is in assumes (if used)."""
         if "command-chain" in self.assumes:
@@ -274,13 +175,10 @@ class Snap:
                 self.assumes.add("command-chain")
                 return
 
-    @classmethod  # noqa: C901
-    def from_dict(cls, snap_dict: Dict[str, Any]) -> "Snap":
+    @classmethod
+    def unmarshal(cls, snap_dict: Dict[str, Any]) -> "SnapYaml":  # noqa: C901
         snap_dict = deepcopy(snap_dict)
 
-        # Using pop() so we can catch if we *miss* fields
-        # with whatever remains in the dictionary.
-        adopt_info = snap_dict.pop("adopt-info", None)
         architectures = snap_dict.pop("architectures", None)
 
         # Process apps into Applications.
@@ -295,8 +193,6 @@ class Snap:
         assumes = set(snap_dict.pop("assumes", set()))
 
         base = snap_dict.pop("base", None)
-        build_base = snap_dict.pop("build-base", None)
-        compression = snap_dict.pop("compression", None)
         confinement = snap_dict.pop("confinement", None)
         description = snap_dict.pop("description", None)
         environment = snap_dict.pop("environment", None)
@@ -318,16 +214,6 @@ class Snap:
         layout = snap_dict.pop("layout", None)
         license = snap_dict.pop("license", None)
         name = snap_dict.pop("name", None)
-
-        raw_repositories = snap_dict.pop("package-repositories", None)
-        if raw_repositories is None:
-            package_repositories = None
-        else:
-            package_repositories = PackageRepository.unmarshal_package_repositories(
-                raw_repositories
-            )
-
-        passthrough = snap_dict.pop("passthrough", None)
 
         # Process plugs into Plugs.
         plugs: Dict[str, Plug] = dict()
@@ -365,14 +251,11 @@ class Snap:
         for key, value in snap_dict.items():
             logger.debug(f"ignoring or passing through unknown {key}={value}")
 
-        return Snap(
-            adopt_info=adopt_info,
+        return SnapYaml(
             architectures=architectures,
             apps=apps,
             assumes=assumes,
             base=base,
-            build_base=build_base,
-            compression=compression,
             confinement=confinement,
             description=description,
             environment=environment,
@@ -382,8 +265,6 @@ class Snap:
             layout=layout,
             license=license,
             name=name,
-            passthrough=passthrough,
-            package_repositories=package_repositories,
             plugs=plugs,
             slots=slots,
             summary=summary,
@@ -393,7 +274,7 @@ class Snap:
             version=version,
         )
 
-    def to_dict(self):  # noqa: C901
+    def marshal(self):  # noqa: C901
         snap_dict = OrderedDict()
 
         # Ensure command-chain is in assumes, if required.
@@ -411,9 +292,6 @@ class Snap:
         if self.description is not None:
             snap_dict["description"] = self.description
 
-        if self.adopt_info is not None:
-            snap_dict["adopt-info"] = self.adopt_info
-
         if self.apps:
             snap_dict["apps"] = OrderedDict()
             for name, app in sorted(self.apps.items()):
@@ -427,12 +305,6 @@ class Snap:
 
         if self.base is not None:
             snap_dict["base"] = self.base
-
-        if self.build_base is not None:
-            snap_dict["build-base"] = self.build_base
-
-        if self.compression is not None:
-            snap_dict["compression"] = self.compression
 
         if self.confinement is not None:
             snap_dict["confinement"] = self.confinement
@@ -457,13 +329,6 @@ class Snap:
         if self.license is not None:
             snap_dict["license"] = self.license
 
-        package_repos = [repo.marshal() for repo in self.package_repositories]
-        if package_repos:
-            snap_dict["package-repositories"] = package_repos
-
-        if self.passthrough:
-            snap_dict["passthrough"] = deepcopy(self.passthrough)
-
         if self.plugs:
             snap_dict["plugs"] = OrderedDict()
             for name, plug in sorted(self.plugs.items()):
@@ -487,29 +352,14 @@ class Snap:
 
         return snap_dict
 
-    def to_snap_yaml_dict(self) -> OrderedDict:
-        snap_dict = self.to_dict()
+    def write_snap_yaml(self, path: str) -> None:
+        """Write snap.yaml contents to specified path."""
+        snap_dict = self.marshal()
 
         # If the base is core in snapcraft.yaml we do not set it in
         # snap.yaml LP: #1819290
         if self.base == "core":
             snap_dict.pop("base")
-
-        # Remove keys that are not for snap.yaml.
-        snap_dict.pop("build-base", None)
-        snap_dict.pop("adopt-info", None)
-        snap_dict.pop("compression", None)
-        snap_dict.pop("package-repositories", None)
-
-        # Apply passthrough keys.
-        passthrough = snap_dict.pop("passthrough", dict())
-        snap_dict.update(passthrough)
-
-        return snap_dict
-
-    def write_snap_yaml(self, path: str) -> None:
-        """Write snap.yaml contents to specified path."""
-        snap_dict = self.to_snap_yaml_dict()
 
         with open(path, "w") as f:
             yaml_utils.dump(snap_dict, stream=f, sort_keys=False)
