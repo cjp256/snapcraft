@@ -17,17 +17,16 @@ import contextlib
 import logging
 import os
 import shutil
-from typing import Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from snapcraft import formatting_utils
-from snapcraft.internal import errors, project_loader, mountinfo, steps
-
-
-logger = logging.getLogger(__name__)
-
+from snapcraft.internal import errors, mountinfo, steps
+from snapcraft.project import load_config
 
 if TYPE_CHECKING:
     from snapcraft.project import Project
+
+logger = logging.getLogger(__name__)
 
 
 def _clean_part(part_name, step, config, staged_state, primed_state):
@@ -196,7 +195,7 @@ def clean(project: "Project", parts, step=None):
         _cleanup_common_directories_for_step(step, project)
         return
 
-    config = project_loader.load_config(project)
+    config = load_config(project)
 
     if not parts and step <= steps.PRIME:
         # If we've been asked to clean stage or prime without being given

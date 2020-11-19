@@ -22,7 +22,7 @@ from testtools import TestCase
 from testtools.matchers import Contains, Equals
 
 # required for schema format checkers
-import snapcraft.internal.project_loader._config  # noqa: F401
+import snapcraft.project._config  # noqa: F401
 from snapcraft.project import errors
 from snapcraft.project._schema import Validator
 

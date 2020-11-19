@@ -22,8 +22,7 @@ import sys
 import click
 import tabulate
 
-from snapcraft import yaml_utils
-from snapcraft.internal import project_loader
+from snapcraft import project, yaml_utils
 
 from ._options import get_project
 
@@ -40,7 +39,7 @@ def list_extensions(**kwargs):
     This command has an alias of `extensions`.
     """
 
-    extension_names = project_loader.supported_extension_names()
+    extension_names = project.supported_extension_names()
 
     if not extension_names:
         click.echo("No extensions supported")
@@ -48,7 +47,7 @@ def list_extensions(**kwargs):
 
     extensions = []
     for extension_name in sorted(extension_names):
-        extension = project_loader.find_extension(extension_name)
+        extension = project.find_extension(extension_name)
         extension_info = collections.OrderedDict()
         extension_info["Extension name"] = extension_name.replace("_", "-")
         extension_info["Supported bases"] = ", ".join(
@@ -65,12 +64,12 @@ def list_extensions(**kwargs):
 def extension(ctx, name, **kwargs):
     """Show contents of extension."""
 
-    extension_cls = project_loader.find_extension(name)
+    extension_cls = project.find_extension(name)
 
     # Not using inspect.getdoc here since it'll fall back to the base class
     docstring = extension_cls.__doc__
     if not docstring:
-        raise project_loader.errors.ExtensionMissingDocumentationError(name)
+        raise project.errors.ExtensionMissingDocumentationError(name)
 
     formatter = ctx.make_formatter()
     formatter.write_text(inspect.cleandoc(docstring))
@@ -89,9 +88,7 @@ def expand_extensions(**kwargs):
         os.environ["SNAPCRAFT_ENABLE_EXPERIMENTAL_EXTENSIONS"] = "True"
 
     project = get_project(**kwargs)
-    yaml_with_extensions = project_loader.apply_extensions(
-        project.info.get_raw_snapcraft()
-    )
+    yaml_with_extensions = project.apply_extensions(project.info.get_raw_snapcraft())
 
     # Loading the config applied all the extensions, so just dump it back out
     yaml_utils.dump(yaml_with_extensions, stream=sys.stdout)

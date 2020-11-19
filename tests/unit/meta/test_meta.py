@@ -35,7 +35,7 @@ from testtools.matchers import (
 )
 
 from snapcraft import extractors, yaml_utils
-from snapcraft.internal import errors, project_loader, states
+from snapcraft.internal import errors, project, states
 from snapcraft.internal.meta import _snap_packaging
 from snapcraft.internal.meta import errors as meta_errors
 from snapcraft.project import Project
@@ -79,7 +79,7 @@ class CreateBaseTestCase(unit.TestCase):
         self.hooks_dir = os.path.join(self.meta_dir, "hooks")
         self.snap_yaml = os.path.join(self.meta_dir, "snap.yaml")
 
-        self.config = project_loader.load_config(project=self.project)
+        self.config = project.load_config(project=self.project)
         if build:
             for part in self.config.parts.all_parts:
                 part.pull()
@@ -1226,7 +1226,7 @@ class GenerateHookWrappersTestCase(CreateBaseTestCase):
                 ),
             )
 
-    @patch("snapcraft.internal.project_loader._config.Config.snap_env")
+    @patch("snapcraft.project._config.Config.snap_env")
     def test_generated_hook_wrappers_include_environment(self, mock_snap_env):
         mock_snap_env.return_value = ["PATH={}/foo".format(self.prime_dir)]
 
@@ -1425,7 +1425,7 @@ class CommonIdTestCase(CreateBaseTestCase):
 
         yaml_path = self.make_snapcraft_yaml(yaml.format(common_id=common_id))
         project = Project(snapcraft_yaml_file_path=yaml_path)
-        return project_loader.load_config(project)
+        return project.load_config(project)
 
     def test_common_id(self):
         config = self.make_snapcraft_project(common_id="test.id.2")

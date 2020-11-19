@@ -22,9 +22,9 @@ import requests.exceptions
 from requests.packages import urllib3
 
 from snapcraft.internal import errors, pluginhandler, steps
-from snapcraft.internal.project_loader import errors as project_loader_errors
-from snapcraft.internal.project_loader.inspection import errors as inspection_errors
 from snapcraft.internal.repo import errors as repo_errors
+from snapcraft.project import errors as project_errors
+from snapcraft.project.inspection import errors as inspection_errors
 from snapcraft.storeapi import errors as store_errors
 
 
@@ -71,7 +71,7 @@ class TestErrorFormatting:
         (
             "SnapcraftAfterPartMissingError",
             {
-                "exception_class": project_loader_errors.SnapcraftAfterPartMissingError,
+                "exception_class": project_errors.SnapcraftAfterPartMissingError,
                 "kwargs": {"part_name": "test-part1", "after_part_name": "test-part2"},
                 "expected_message": (
                     "Failed to get part information: "

@@ -30,7 +30,7 @@ from testtools.matchers import (
 )
 
 import snapcraft
-from snapcraft.internal import errors, lifecycle, pluginhandler, project_loader, steps
+from snapcraft.internal import errors, lifecycle, pluginhandler, steps
 from snapcraft.internal.lifecycle._runner import _replace_in_part
 from snapcraft.project import Project
 from tests import fixture_setup
@@ -296,7 +296,7 @@ class ExecutionTestCase(LifecycleTestBase):
             snapcraft_yaml_file_path=self.snapcraft_yaml_file_path,
             target_deb_arch="amd64",
         )
-        project_config = project_loader.load_config(project)
+        project_config = project.load_config(project)
         # Pull it with amd64
         lifecycle.execute(steps.PULL, project_config)
 
@@ -308,7 +308,7 @@ class ExecutionTestCase(LifecycleTestBase):
             snapcraft_yaml_file_path=self.snapcraft_yaml_file_path,
             target_deb_arch="armhf",
         )
-        project_config = project_loader.load_config(project)
+        project_config = project.load_config(project)
         # Pull it again with armhf. Should catch that the part needs to be
         # re-pulled due to the change in target architecture and raise an
         # error.
@@ -354,7 +354,7 @@ class ExecutionTestCase(LifecycleTestBase):
         project = Project(
             snapcraft_yaml_file_path=snapcraft_yaml.snapcraft_yaml_file_path
         )
-        project_config = project_loader.load_config(project)
+        project_config = project.load_config(project)
 
         # This should not fail
         lifecycle.execute(steps.PULL, project_config)

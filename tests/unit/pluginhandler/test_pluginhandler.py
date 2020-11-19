@@ -32,7 +32,6 @@ from snapcraft.internal import (
     errors,
     lifecycle,
     pluginhandler,
-    project_loader,
     repo,
     states,
     steps,
@@ -845,7 +844,7 @@ class RealStageTestCase(unit.TestCase):
             )
         )
         project = Project(snapcraft_yaml_file_path=snapcraft_yaml_file_path)
-        return project_loader.load_config(project)
+        return project.load_config(project)
 
     def test_pc_files_correctly_prefixed(self):
         pc_file = os.path.join("usr", "lib", "pkgconfig", "granite.pc")

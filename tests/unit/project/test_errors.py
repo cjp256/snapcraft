@@ -40,20 +40,6 @@ class TestErrorFormatting:
                 "expected_message": "Issues while validating .snapcraft.yaml: error",
             },
         ),
-        (
-            "DuplicateSnapcraftYamlError",
-            {
-                "exception_class": errors.DuplicateSnapcraftYamlError,
-                "kwargs": {
-                    "snapcraft_yaml_file_path": ".snapcraft.yaml",
-                    "other_snapcraft_yaml_file_path": "snapcraft.yaml",
-                },
-                "expected_message": (
-                    "Found a '.snapcraft.yaml' and a 'snapcraft.yaml'.\n"
-                    "Please remove one and try again."
-                ),
-            },
-        ),
     ]
 
     def test_error_formatting(self, exception_class, kwargs, expected_message):

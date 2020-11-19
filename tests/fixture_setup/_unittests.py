@@ -357,9 +357,7 @@ class FakeExtension(fixtures.Fixture):
 
     def __init__(self, extension_name, extension_class):
         super().__init__()
-        self._import_name = "snapcraft.internal.project_loader._extensions.{}".format(
-            extension_name
-        )
+        self._import_name = "snapcraft.project._extensions.{}".format(extension_name)
         self._extension_class = extension_class
 
     def _setUp(self):

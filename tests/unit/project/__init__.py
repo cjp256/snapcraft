@@ -14,9 +14,31 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+from unittest import mock
+
 from snapcraft.project import Project as _Project
 from snapcraft.project import errors
 from tests import unit
+
+
+class ProjectLoaderBaseTest(unit.TestCase):
+    def make_snapcraft_project(self, snapcraft_yaml, project_kwargs=None):
+        snapcraft_yaml_file_path = self.make_snapcraft_yaml(snapcraft_yaml)
+        if project_kwargs is None:
+            project_kwargs = dict()
+        project = _Project(
+            snapcraft_yaml_file_path=snapcraft_yaml_file_path, **project_kwargs
+        )
+        return project.load_config(project)
+
+
+class LoadPartBaseTest(ProjectLoaderBaseTest):
+    def setUp(self):
+        super().setUp()
+
+        patcher = mock.patch("snapcraft.project._parts_config.PartsConfig.load_part")
+        self.mock_load_part = patcher.start()
+        self.addCleanup(patcher.stop)
 
 
 class ProjectBaseTest(unit.TestCase):
