@@ -213,8 +213,8 @@ def clean(project: "Project", parts, step=None):
     else:
         parts = [part.name for part in config.all_parts]
 
-    staged_state = config.get_project_state(steps.STAGE)
-    primed_state = config.get_project_state(steps.PRIME)
+    staged_state = project.get_project_state(steps.STAGE)
+    primed_state = project.get_project_state(steps.PRIME)
 
     _clean_parts(parts, step, config, staged_state, primed_state)
 
