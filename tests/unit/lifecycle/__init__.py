@@ -20,7 +20,6 @@ import textwrap
 import fixtures
 
 import snapcraft
-from snapcraft.internal import project_loader
 from tests import unit
 
 
@@ -40,7 +39,7 @@ class LifecycleTestBase(unit.TestCase):
 
         self.useFixture(
             fixtures.MockPatch(
-                "snapcraft.internal.project_loader._config.Config.get_build_packages",
+                "snapcraft.project._config.Config.get_build_packages",
                 return_value=set(),
             )
         )
@@ -53,8 +52,7 @@ class LifecycleTestBase(unit.TestCase):
 
         self.useFixture(
             fixtures.MockPatch(
-                "snapcraft.internal.project_loader._config.Config.get_build_snaps",
-                return_value=set(),
+                "snapcraft.project._config.Config.get_build_snaps", return_value=set(),
             )
         )
 
@@ -80,4 +78,4 @@ class LifecycleTestBase(unit.TestCase):
         project = snapcraft.project.Project(
             snapcraft_yaml_file_path=self.snapcraft_yaml_file_path
         )
-        return project_loader.load_config(project)
+        return project.load_config(project)

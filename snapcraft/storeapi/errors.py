@@ -23,7 +23,7 @@ from requests.packages import urllib3
 from simplejson.scanner import JSONDecodeError
 
 from snapcraft import formatting_utils
-from snapcraft.internal.errors import SnapcraftError, SnapcraftException
+from ..errors import SnapcraftError, SnapcraftException
 
 from . import channels, status
 

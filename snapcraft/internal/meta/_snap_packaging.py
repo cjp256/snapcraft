@@ -29,16 +29,15 @@ from typing import Any, Dict, List, Optional, Set  # noqa
 
 import requests
 
-from snapcraft import extractors, file_utils, formatting_utils, shell_utils, yaml_utils
+from snapcraft import extractors, file_utils, formatting_utils, project, shell_utils, yaml_utils
 from snapcraft.extractors import _metadata
-from snapcraft.internal import common, errors, project_loader, states
+from snapcraft.internal import common, errors, states
 from snapcraft.internal.deprecations import handle_deprecation_notice
 from snapcraft.internal.meta import _manifest, _version
 from snapcraft.internal.meta import errors as meta_errors
 from snapcraft.internal.meta.application import ApplicationAdapter
 from snapcraft.internal.meta.snap import Snap
-from snapcraft.internal.project_loader import _config
-from snapcraft.project import _schema
+from snapcraft.project import _config, _schema
 
 logger = logging.getLogger(__name__)
 
@@ -97,9 +96,7 @@ def create_snap_packaging(project_config: _config.Config) -> str:
 
 
 def _update_yaml_with_extracted_metadata(
-    config_data: Dict[str, Any],
-    parts_config: project_loader.PartsConfig,
-    prime_dir: str,
+    config_data: Dict[str, Any], parts_config: project.PartsConfig, prime_dir: str,
 ) -> Optional[extractors.ExtractedMetadata]:
     if "adopt-info" not in config_data:
         return None
@@ -504,7 +501,7 @@ class _SnapPackaging:
         else:
             # TODO use something local to the meta package and
             # only add paths for directory items that actually exist.
-            runtime_env = project_loader.runtime_env(
+            runtime_env = project.runtime_env(
                 self._prime_dir, self._project_config.project.arch_triplet
             )
             for e in runtime_env:

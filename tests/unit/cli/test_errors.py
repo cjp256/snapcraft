@@ -26,6 +26,8 @@ import xdg
 from testtools.matchers import Equals, FileContains
 
 import snapcraft.cli.echo
+import snapcraft.errors
+import snapcraft.errors.errors
 import snapcraft.internal.errors
 from snapcraft.cli._errors import (
     _get_exception_exit_code,
@@ -37,7 +39,7 @@ from snapcraft.internal.build_providers.errors import ProviderExecError
 from tests import fixture_setup, unit
 
 
-class SnapcraftTError(snapcraft.internal.errors.SnapcraftError):
+class SnapcraftTError(snapcraft.errors.SnapcraftError):
 
     fmt = "{message}"
 
@@ -48,7 +50,7 @@ class SnapcraftTError(snapcraft.internal.errors.SnapcraftError):
         return 123
 
 
-class SnapcraftTException(snapcraft.internal.errors.SnapcraftException):
+class SnapcraftTException(snapcraft.errors.SnapcraftException):
     def __init__(self):
         self._brief = ""
         self._resolution = ""
@@ -146,7 +148,7 @@ https://docs.snapcraft.io/the-snapcraft-format/8337"""
     def test_snapcraft_exception_reportable(self):
         exception = SnapcraftTException()
         exception._brief = "something's strange, in the neighborhood"
-        exc_info = (snapcraft.internal.errors.SnapcraftException, exception, None)
+        exc_info = (snapcraft.errors.SnapcraftException, exception, None)
 
         # Test default (is false).
         self.assertFalse(_is_reportable_error(exc_info))

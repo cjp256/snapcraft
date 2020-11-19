@@ -27,6 +27,8 @@ from raven import Client as RavenClient
 from raven.transport import RequestsHTTPTransport
 
 import snapcraft
+import snapcraft.errors
+import snapcraft.errors.errors
 from snapcraft.config import CLIConfig as _CLIConfig
 from snapcraft.internal import errors
 
@@ -80,17 +82,17 @@ def _is_connected_to_tty() -> bool:
 
 def _is_reportable_error(exc_info) -> bool:
     # SnapcraftException has explicit `repotable` attribute.
-    if isinstance(exc_info[1], errors.SnapcraftException):
+    if isinstance(exc_info[1], snapcraft.errors.SnapcraftException):
         return exc_info[1].get_reportable()
 
     # Report non-snapcraft errors.
-    if not issubclass(exc_info[0], errors.SnapcraftError) and not isinstance(
+    if not issubclass(exc_info[0], snapcraft.errors.SnapcraftError) and not isinstance(
         exc_info[1], KeyboardInterrupt
     ):
         return True
 
     # Report SnapcraftReportableError errors.
-    if issubclass(exc_info[0], errors.SnapcraftReportableError):
+    if issubclass(exc_info[0], snapcraft.errors.SnapcraftReportableError):
         return True
 
     return False
@@ -143,7 +145,7 @@ def _handle_sentry_submission(exc_info) -> None:
             click.echo(_MSG_SEND_TO_SENTRY_THANKS)
 
 
-def _print_snapcraft_exception_message(exception: errors.SnapcraftException):
+def _print_snapcraft_exception_message(exception: snapcraft.errors.SnapcraftException):
     parts = [exception.get_brief()]
 
     resolution = exception.get_resolution()
@@ -162,7 +164,7 @@ def _print_snapcraft_exception_message(exception: errors.SnapcraftException):
 
 
 def _print_exception_message(exception: Exception) -> None:
-    if isinstance(exception, errors.SnapcraftException):
+    if isinstance(exception, snapcraft.errors.SnapcraftException):
         _print_snapcraft_exception_message(exception)
     else:
         echo.error(str(exception))
@@ -218,10 +220,10 @@ def _process_outer_exception(exc_info, debug):
 
 
 def _get_exception_exit_code(exception: Exception):
-    if isinstance(exception, errors.SnapcraftException):
+    if isinstance(exception, snapcraft.errors.SnapcraftException):
         return exception.get_exit_code()
 
-    if isinstance(exception, errors.SnapcraftError):
+    if isinstance(exception, snapcraft.errors.SnapcraftError):
         return exception.get_exit_code()
 
     # If non-snapcraft error, exit code defaults to 1.

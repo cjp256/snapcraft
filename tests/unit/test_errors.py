@@ -21,10 +21,12 @@ from unittest import mock
 import requests.exceptions
 from requests.packages import urllib3
 
+import snapcraft.errors
+import snapcraft.errors.errors
 from snapcraft.internal import errors, pluginhandler, steps
-from snapcraft.internal.project_loader import errors as project_loader_errors
-from snapcraft.internal.project_loader.inspection import errors as inspection_errors
 from snapcraft.internal.repo import errors as repo_errors
+from snapcraft.project import errors as project_errors
+from snapcraft.project.inspection import errors as inspection_errors
 from snapcraft.storeapi import errors as store_errors
 
 
@@ -71,7 +73,7 @@ class TestErrorFormatting:
         (
             "SnapcraftAfterPartMissingError",
             {
-                "exception_class": project_loader_errors.SnapcraftAfterPartMissingError,
+                "exception_class": project_errors.SnapcraftAfterPartMissingError,
                 "kwargs": {"part_name": "test-part1", "after_part_name": "test-part2"},
                 "expected_message": (
                     "Failed to get part information: "
@@ -601,7 +603,7 @@ class TestErrorFormatting:
         assert str(exception_class(**kwargs)) == expected_message
 
 
-class StrangeExceptionSimple(errors.SnapcraftException):
+class StrangeExceptionSimple(snapcraft.errors.SnapcraftException):
     def get_brief(self):
         return "something's strange, in the neighborhood"
 
@@ -615,7 +617,7 @@ class StrangeExceptionSimple(errors.SnapcraftException):
         return "https://docs.snapcraft.io/the-snapcraft-format/8337"
 
 
-class StrangeExceptionWithFormatting(errors.SnapcraftException):
+class StrangeExceptionWithFormatting(snapcraft.errors.SnapcraftException):
     def __init__(self, neighborhood: str, contact: str, ghosts: List[str]) -> None:
         self._neighborhood = neighborhood
         self._contact = contact

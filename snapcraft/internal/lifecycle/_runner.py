@@ -15,24 +15,23 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
-from typing import Optional, List, Sequence, Set
+from typing import List, Optional, Sequence, Set
 
-from snapcraft import config, plugins, storeapi
+from snapcraft import config, plugins, project, storeapi
 from snapcraft.internal import (
     common,
     errors,
     pluginhandler,
-    project_loader,
     repo,
     states,
     steps,
 )
+from snapcraft.internal.meta._snap_packaging import create_snap_packaging
 from snapcraft.internal.pluginhandler._part_environment import (
     get_snapcraft_part_directory_environment,
 )
-from snapcraft.internal.meta._snap_packaging import create_snap_packaging
-from ._status_cache import StatusCache
 
+from ._status_cache import StatusCache
 
 logger = logging.getLogger(__name__)
 
@@ -88,7 +87,7 @@ def _install_build_snaps(build_snaps: Set[str], content_snaps: Set[str]) -> List
 
 def execute(
     step: steps.Step,
-    project_config: "project_loader._config.Config",
+    project_config: "project._config.Config",
     part_names: Sequence[str] = None,
 ):
     """Execute until step in the lifecycle for part_names or all parts.
@@ -151,11 +150,11 @@ def execute(
 
 def _replace_in_part(part):
     for key, value in part.plugin.options.__dict__.items():
-        replacements = project_loader.environment_to_replacements(
+        replacements = project.environment_to_replacements(
             get_snapcraft_part_directory_environment(part)
         )
 
-        value = project_loader.replace_attr(value, replacements)
+        value = project.replace_attr(value, replacements)
         setattr(part.plugin.options, key, value)
 
     return part

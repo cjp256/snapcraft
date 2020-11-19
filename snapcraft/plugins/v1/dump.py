@@ -28,11 +28,13 @@ such as: `filesets`, `stage`, `snap` and `organize`.
 import os
 
 import snapcraft
+import snapcraft.errors
+import snapcraft.errors.errors
 from snapcraft.internal import errors
 from snapcraft.plugins.v1 import PluginV1
 
 
-class DumpInvalidSymlinkError(errors.SnapcraftError):
+class DumpInvalidSymlinkError(snapcraft.errors.SnapcraftError):
     fmt = (
         "Failed to copy {path!r}: it's a symlink pointing outside the snap.\n"
         "Fix it to be valid when snapped and try again."

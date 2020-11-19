@@ -37,6 +37,8 @@ import urllib.request
 import json
 from typing import List
 
+import snapcraft.errors
+import snapcraft.errors.errors
 from snapcraft import sources
 from snapcraft import formatting_utils
 from snapcraft.internal import errors
@@ -51,7 +53,7 @@ _VERSION_DEFAULT = "2.0"
 _SDK_ARCH = ["amd64"]
 
 
-class DotNetBadArchitectureError(errors.SnapcraftError):
+class DotNetBadArchitectureError(snapcraft.errors.SnapcraftError):
 
     fmt = (
         "Failed to prepare the .NET SDK: "
@@ -66,7 +68,7 @@ class DotNetBadArchitectureError(errors.SnapcraftError):
         )
 
 
-class DotNetBadReleaseDataError(errors.SnapcraftError):
+class DotNetBadReleaseDataError(snapcraft.errors.SnapcraftError):
 
     fmt = (
         "Failed to prepare the .NET SDK: "

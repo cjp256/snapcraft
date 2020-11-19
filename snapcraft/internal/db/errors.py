@@ -16,7 +16,7 @@
 
 import pathlib
 
-from snapcraft.internal.errors import SnapcraftException
+from snapcraft.errors import SnapcraftException
 
 
 class SnapcraftDatastoreVersionUnsupported(SnapcraftException):

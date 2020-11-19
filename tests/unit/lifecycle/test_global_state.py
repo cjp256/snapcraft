@@ -18,7 +18,7 @@ import fixtures
 from testtools import TestCase
 from testtools.matchers import Equals
 
-from snapcraft.internal import lifecycle, project_loader, states, steps
+from snapcraft.internal import lifecycle, states, steps
 from snapcraft.project import Project
 from snapcraft.storeapi.errors import SnapNotFoundError
 from snapcraft.storeapi.info import SnapInfo
@@ -45,7 +45,7 @@ class TestGlobalState(TestCase):
 
         self.global_state_filepath = project._get_global_state_file_path()
 
-        self.project_config = project_loader.load_config(project)
+        self.project_config = project.load_config(project)
 
         self.useFixture(
             fixtures.MockPatchObject(

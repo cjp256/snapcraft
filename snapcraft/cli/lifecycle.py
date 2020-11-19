@@ -34,9 +34,9 @@ from snapcraft.internal import (
     errors,
     indicators,
     lifecycle,
-    project_loader,
     steps,
 )
+from snapcraft.project import load_config
 from snapcraft.project._sanity_checks import conduct_project_sanity_check
 
 from . import echo
@@ -88,7 +88,7 @@ def _execute(  # noqa: C901
     conduct_project_sanity_check(project, **kwargs)
 
     if build_provider in ["host", "managed-host"]:
-        project_config = project_loader.load_config(project)
+        project_config = load_config(project)
         lifecycle.execute(step, project_config, parts)
         if pack_project:
             _pack(

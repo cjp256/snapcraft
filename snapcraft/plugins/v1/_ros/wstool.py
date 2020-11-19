@@ -19,16 +19,20 @@ import pathlib
 import logging
 import subprocess
 import sys
-from typing import List
+from typing import List, TYPE_CHECKING
 
 import snapcraft
+import snapcraft.errors
+import snapcraft.errors.errors
 from snapcraft.internal import errors, repo
-from snapcraft.project import Project
+
+if TYPE_CHECKING:
+    from snapcraft.project import Project
 
 logger = logging.getLogger(__name__)
 
 
-class WstoolError(errors.SnapcraftError):
+class WstoolError(snapcraft.errors.SnapcraftError):
     pass
 
 
@@ -57,7 +61,7 @@ class Wstool:
     """This class serves as a Python wrapper for the CLI utility wstool."""
 
     def __init__(
-        self, ros_package_path: str, wstool_path: str, project: Project, base: str
+        self, ros_package_path: str, wstool_path: str, project: "Project", base: str
     ) -> None:
         """Create new Wstool
 

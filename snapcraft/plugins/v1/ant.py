@@ -65,6 +65,8 @@ from glob import glob
 from typing import Sequence
 from urllib.parse import urlsplit
 
+import snapcraft.errors
+import snapcraft.errors.errors
 from snapcraft import formatting_utils
 from snapcraft.plugins.v1 import PluginV1
 from snapcraft.internal import errors, sources
@@ -78,7 +80,7 @@ _ANT_ARCHIVE_FORMAT_URL = (
 _DEFAULT_ANT_SNAP_CHANNEL = "latest/stable"
 
 
-class UnsupportedJDKVersionError(errors.SnapcraftError):
+class UnsupportedJDKVersionError(snapcraft.errors.SnapcraftError):
 
     fmt = (
         "The ant-openjdk-version plugin property was set to {version!r}.\n"

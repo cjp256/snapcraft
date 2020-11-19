@@ -66,6 +66,8 @@ import shutil
 import textwrap
 from typing import List
 
+import snapcraft.errors
+import snapcraft.errors.errors
 from snapcraft import file_utils
 from snapcraft.internal import errors, mangling, os_release, repo
 from snapcraft.internal.meta.package_repository import (
@@ -97,7 +99,7 @@ _BASE_TO_UBUNTU_RELEASE_MAP = {"core18": "bionic"}
 _SUPPORTED_DEPENDENCY_TYPES = {"apt", "pip"}
 
 
-class ColconInvalidSystemDependencyError(errors.SnapcraftError):
+class ColconInvalidSystemDependencyError(snapcraft.errors.SnapcraftError):
     fmt = (
         "Package {dependency!r} isn't a valid system dependency. Did you "
         "forget to add it to colcon-packages? If not, add the Ubuntu package "
@@ -109,7 +111,7 @@ class ColconInvalidSystemDependencyError(errors.SnapcraftError):
         super().__init__(dependency=dependency)
 
 
-class ColconUnsupportedDependencyTypeError(errors.SnapcraftError):
+class ColconUnsupportedDependencyTypeError(snapcraft.errors.SnapcraftError):
     fmt = (
         "Package {dependency!r} resolved to an unsupported type of "
         "dependency: {dependency_type!r}."
@@ -119,21 +121,21 @@ class ColconUnsupportedDependencyTypeError(errors.SnapcraftError):
         super().__init__(dependency_type=dependency_type, dependency=dependency)
 
 
-class ColconWorkspaceIsRootError(errors.SnapcraftError):
+class ColconWorkspaceIsRootError(snapcraft.errors.SnapcraftError):
     fmt = (
         "colcon-source-space cannot be the root of the colcon workspace; use a "
         "subdirectory."
     )
 
 
-class ColconAptDependencyFetchError(errors.SnapcraftError):
+class ColconAptDependencyFetchError(snapcraft.errors.SnapcraftError):
     fmt = "Failed to fetch apt dependencies: {message}"
 
     def __init__(self, message):
         super().__init__(message=message)
 
 
-class ColconPackagePathNotFoundError(errors.SnapcraftError):
+class ColconPackagePathNotFoundError(snapcraft.errors.SnapcraftError):
     fmt = "Failed to find package path: {path!r}"
 
     def __init__(self, path):

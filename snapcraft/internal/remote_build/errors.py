@@ -16,10 +16,7 @@
 
 from typing import List, Sequence  # noqa: F401
 
-from snapcraft.internal.errors import (
-    SnapcraftException,
-    SnapcraftError as _SnapcraftError,
-)
+from snapcraft.errors import SnapcraftError as _SnapcraftError, SnapcraftException
 
 
 class RemoteBuildBaseError(_SnapcraftError):

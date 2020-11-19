@@ -23,26 +23,28 @@ import subprocess
 import sys
 from typing import Dict, Set
 
+import snapcraft.errors
+import snapcraft.errors.errors
 from snapcraft.internal import errors, repo
 
 logger = logging.getLogger(__name__)
 
 
-class RosdepPackageNotFoundError(errors.SnapcraftError):
+class RosdepPackageNotFoundError(snapcraft.errors.SnapcraftError):
     fmt = "rosdep cannot find Catkin package {package!r}"
 
     def __init__(self, package):
         super().__init__(package=package)
 
 
-class RosdepDependencyNotResolvedError(errors.SnapcraftError):
+class RosdepDependencyNotResolvedError(snapcraft.errors.SnapcraftError):
     fmt = "rosdep cannot resolve {dependency!r} into a valid dependency"
 
     def __init__(self, dependency):
         super().__init__(dependency=dependency)
 
 
-class RosdepUnexpectedResultError(errors.SnapcraftError):
+class RosdepUnexpectedResultError(snapcraft.errors.SnapcraftError):
     fmt = (
         "Received unexpected result from rosdep when trying to resolve "
         "{dependency!r}:\n{output}"
@@ -52,7 +54,7 @@ class RosdepUnexpectedResultError(errors.SnapcraftError):
         super().__init__(dependency=dependency, output=output)
 
 
-class RosdepInitializationError(errors.SnapcraftError):
+class RosdepInitializationError(snapcraft.errors.SnapcraftError):
     fmt = "Failed to initialize rosdep: {message}"
 
     def __init__(self, message):

@@ -16,13 +16,15 @@
 
 import shlex
 
+import snapcraft.errors
+import snapcraft.errors.errors
 from snapcraft import formatting_utils
 from snapcraft.internal import errors
 
 from typing import List
 
 
-class SnapcraftSourceError(errors.SnapcraftError):
+class SnapcraftSourceError(snapcraft.errors.SnapcraftError):
     pass
 
 
@@ -134,7 +136,7 @@ class SnapcraftRequestError(SnapcraftSourceError):
     fmt = "Network request error: {message}"
 
 
-class GitCommandError(errors.SnapcraftException):
+class GitCommandError(snapcraft.errors.SnapcraftException):
     def __init__(self, *, command: List[str], exit_code: int, output: str) -> None:
         self._command = " ".join(shlex.quote(i) for i in command)
         self._exit_code = exit_code

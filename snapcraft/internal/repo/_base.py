@@ -24,13 +24,12 @@ import pathlib
 import re
 import shutil
 import stat
-
 from typing import List, Optional, Set
 
 from snapcraft import file_utils
-from snapcraft.internal import mangling, xattrs
-from . import errors
+from snapcraft.internal import xattrs
 
+from . import errors
 
 logger = logging.getLogger(__name__)
 
@@ -288,7 +287,7 @@ class BaseRepo:
     @classmethod
     def _fix_shebangs(cls, unpackdir: str) -> None:
         """Change hard-coded shebangs in unpacked files to use env."""
-        mangling.rewrite_python_shebangs(unpackdir)
+        # mangling.rewrite_python_shebangs(unpackdir)
 
 
 class DummyRepo(BaseRepo):

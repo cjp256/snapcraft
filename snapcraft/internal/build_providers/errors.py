@@ -18,8 +18,7 @@ import shlex
 from typing import Any, Dict, Optional
 from typing import Sequence  # noqa: F401
 
-from snapcraft.internal.errors import SnapcraftError as _SnapcraftError
-from snapcraft.internal.errors import SnapcraftException as _SnapcraftException
+from snapcraft.errors import SnapcraftError as _SnapcraftError, SnapcraftException as _SnapcraftException
 
 
 class ProviderBaseError(_SnapcraftError):

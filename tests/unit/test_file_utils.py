@@ -25,6 +25,8 @@ import pytest
 import testtools
 from testtools.matchers import Equals
 
+import snapcraft.errors
+import snapcraft.errors.errors
 from snapcraft import file_utils
 from snapcraft.internal import common, errors
 from tests import fixture_setup, unit
@@ -188,7 +190,7 @@ class RequiresCommandSuccessTestCase(unit.TestCase):
             file_utils.requires_command_success("foo").__enter__,
         )
 
-        self.assertIsInstance(raised, errors.SnapcraftError)
+        self.assertIsInstance(raised, snapcraft.errors.SnapcraftError)
         self.assertThat(str(raised), Equals("'foo' not found."))
 
     @mock.patch("subprocess.check_call")
@@ -200,7 +202,7 @@ class RequiresCommandSuccessTestCase(unit.TestCase):
             file_utils.requires_command_success("foo").__enter__,
         )
 
-        self.assertIsInstance(raised, errors.SnapcraftError)
+        self.assertIsInstance(raised, snapcraft.errors.SnapcraftError)
         self.assertThat(str(raised), Equals("'foo' failed."))
 
     def test_requires_command_success_broken(self):
@@ -251,7 +253,7 @@ class RequiresPathExistsTestCase(unit.TestCase):
             file_utils.requires_path_exists("foo").__enter__,
         )
 
-        self.assertIsInstance(raised, errors.SnapcraftError)
+        self.assertIsInstance(raised, snapcraft.errors.SnapcraftError)
         self.assertThat(str(raised), Equals("Required path does not exist: 'foo'"))
 
     def test_requires_path_exists_custom_error(self):

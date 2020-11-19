@@ -83,6 +83,8 @@ import tempfile
 import textwrap
 from typing import TYPE_CHECKING, List, Set
 
+import snapcraft.errors
+import snapcraft.errors.errors
 from snapcraft import file_utils, formatting_utils
 from snapcraft.internal import common, errors, mangling, os_release, repo
 from snapcraft.internal.meta.package_repository import (
@@ -144,7 +146,7 @@ def _parse_cmake_arg(arg: str) -> str:
     return " ".join(shlex.split(arg))
 
 
-class CatkinInvalidSystemDependencyError(errors.SnapcraftError):
+class CatkinInvalidSystemDependencyError(snapcraft.errors.SnapcraftError):
     fmt = (
         "Package {dependency!r} isn't a valid system dependency. Did you "
         "forget to add it to catkin-packages? If not, add the Ubuntu package "
@@ -156,7 +158,7 @@ class CatkinInvalidSystemDependencyError(errors.SnapcraftError):
         super().__init__(dependency=dependency)
 
 
-class CatkinUnsupportedDependencyTypeError(errors.SnapcraftError):
+class CatkinUnsupportedDependencyTypeError(snapcraft.errors.SnapcraftError):
     fmt = (
         "Package {dependency!r} resolved to an unsupported type of "
         "dependency: {dependency_type!r}."
@@ -166,36 +168,36 @@ class CatkinUnsupportedDependencyTypeError(errors.SnapcraftError):
         super().__init__(dependency_type=dependency_type, dependency=dependency)
 
 
-class CatkinWorkspaceIsRootError(errors.SnapcraftError):
+class CatkinWorkspaceIsRootError(snapcraft.errors.SnapcraftError):
     fmt = "source-space cannot be the root of the Catkin workspace; use a subdirectory."
 
 
-class CatkinCannotResolveRoscoreError(errors.SnapcraftError):
+class CatkinCannotResolveRoscoreError(snapcraft.errors.SnapcraftError):
     fmt = "Failed to determine system dependency for roscore."
 
 
-class CatkinAptDependencyFetchError(errors.SnapcraftError):
+class CatkinAptDependencyFetchError(snapcraft.errors.SnapcraftError):
     fmt = "Failed to fetch apt dependencies: {message}"
 
     def __init__(self, message):
         super().__init__(message=message)
 
 
-class CatkinNoHighestVersionPathError(errors.SnapcraftError):
+class CatkinNoHighestVersionPathError(snapcraft.errors.SnapcraftError):
     fmt = "Failed to determine highest path in {path!r}: nothing found."
 
     def __init__(self, path):
         super().__init__(path=path)
 
 
-class CatkinGccVersionError(errors.SnapcraftError):
+class CatkinGccVersionError(snapcraft.errors.SnapcraftError):
     fmt = "Failed to determine gcc version: {message}"
 
     def __init__(self, message):
         super().__init__(message=message)
 
 
-class CatkinPackagePathNotFoundError(errors.SnapcraftError):
+class CatkinPackagePathNotFoundError(snapcraft.errors.SnapcraftError):
     fmt = "Failed to find package path: {path!r}"
 
     def __init__(self, path):
@@ -957,7 +959,7 @@ def _recursively_handle_rosinstall_files(wstool, source_path, *, cache=None):
         _recursively_handle_rosinstall_files(wstool, source_path, cache=cache)
 
 
-class CatkinPackageNotFoundError(errors.SnapcraftError):
+class CatkinPackageNotFoundError(snapcraft.errors.SnapcraftError):
     fmt = "Unable to find Catkin package {package_name!r}"
 
     def __init__(self, package_name):

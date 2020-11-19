@@ -63,6 +63,8 @@ from typing import List, Optional, Set
 
 import requests
 
+import snapcraft.errors
+import snapcraft.errors.errors
 from snapcraft.common import isurl
 from snapcraft.internal import errors, mangling
 from snapcraft.internal.errors import SnapcraftPluginCommandError
@@ -71,12 +73,12 @@ from snapcraft.plugins.v1 import PluginV1, _python
 logger = logging.getLogger(__name__)
 
 
-class UnsupportedPythonVersionError(errors.SnapcraftError):
+class UnsupportedPythonVersionError(snapcraft.errors.SnapcraftError):
 
     fmt = "Unsupported python version: {python_version!r}"
 
 
-class SnapcraftPluginPythonFileMissing(errors.SnapcraftError):
+class SnapcraftPluginPythonFileMissing(snapcraft.errors.SnapcraftError):
 
     fmt = (
         "Failed to find the referred {plugin_property} file at the given "

@@ -49,6 +49,8 @@ import shutil
 import subprocess
 import sys
 
+import snapcraft.errors
+import snapcraft.errors.errors
 from snapcraft import sources
 from snapcraft.internal import errors
 from snapcraft.file_utils import link_or_copy, link_or_copy_tree
@@ -72,7 +74,7 @@ _YARN_VERSION_URL = (
 )
 
 
-class NodejsPluginMissingPackageJsonError(errors.SnapcraftError):
+class NodejsPluginMissingPackageJsonError(snapcraft.errors.SnapcraftError):
 
     fmt = (
         "Could not find a 'package.json' in the source tree.\n"

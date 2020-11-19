@@ -20,8 +20,7 @@ from pathlib import Path
 from testtools.matchers import Equals, FileContains, Is
 
 from snapcraft.internal.meta._snap_packaging import _SnapPackaging
-from snapcraft.internal.project_loader import load_config
-from snapcraft.project import Project
+from snapcraft.project import Project, load_config
 from tests import fixture_setup, unit
 
 

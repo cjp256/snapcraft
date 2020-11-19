@@ -59,6 +59,8 @@ import urllib.parse
 from glob import glob
 from typing import Sequence
 
+import snapcraft.errors
+import snapcraft.errors.errors
 from snapcraft import file_utils, formatting_utils
 from snapcraft.internal import errors, sources
 from snapcraft.plugins.v1 import PluginV1
@@ -73,7 +75,7 @@ _DEFAULT_GRADLE_CHECKSUM = (
 _GRADLE_URL = "https://services.gradle.org/distributions/gradle-{version}-bin.zip"
 
 
-class UnsupportedJDKVersionError(errors.SnapcraftError):
+class UnsupportedJDKVersionError(snapcraft.errors.SnapcraftError):
 
     fmt = (
         "The gradle-openjdk-version plugin property was set to {version!r}.\n"

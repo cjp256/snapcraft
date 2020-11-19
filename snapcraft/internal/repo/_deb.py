@@ -33,7 +33,6 @@ from xdg import BaseDirectory
 from snapcraft import file_utils
 from snapcraft.internal import os_release
 from snapcraft.internal.indicators import is_dumb_terminal
-from snapcraft.project._project_options import ProjectOptions
 
 from . import apt_ppa, errors
 from ._base import BaseRepo, get_pkg_name_parts
@@ -201,6 +200,8 @@ def _run_dpkg_query_list_files(package_name: str) -> Set[str]:
 
 
 def _get_host_arch() -> str:
+    # Late load to prevent import loops.
+    from snapcraft.project._project_options import ProjectOptions
     return ProjectOptions().deb_arch
 
 

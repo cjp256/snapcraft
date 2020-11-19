@@ -16,16 +16,18 @@
 
 from typing import List, Optional
 
+import snapcraft.errors
+import snapcraft.errors.errors
 from snapcraft import formatting_utils
 from snapcraft.internal import errors
 
 
-class CommandError(errors.SnapcraftError):
+class CommandError(snapcraft.errors.SnapcraftError):
     def __init__(self, message: str) -> None:
         self.fmt = message
 
 
-class SnapMetaGenerationError(errors.SnapcraftError):
+class SnapMetaGenerationError(snapcraft.errors.SnapcraftError):
     pass
 
 
@@ -79,7 +81,7 @@ class AmbiguousPassthroughKeyError(SnapMetaGenerationError):
         super().__init__(keys=formatting_utils.humanize_list(keys, "and"))
 
 
-class InvalidAppCommandError(errors.SnapcraftError):
+class InvalidAppCommandError(snapcraft.errors.SnapcraftError):
 
     fmt = (
         "Failed to generate snap metadata: "
@@ -92,7 +94,7 @@ class InvalidAppCommandError(errors.SnapcraftError):
         super().__init__(command=command, app_name=app_name)
 
 
-class InvalidAppCommandNotFound(errors.SnapcraftError):
+class InvalidAppCommandNotFound(snapcraft.errors.SnapcraftError):
 
     fmt = (
         "Failed to generate snap metadata: "
@@ -105,7 +107,7 @@ class InvalidAppCommandNotFound(errors.SnapcraftError):
         super().__init__(command=command, app_name=app_name)
 
 
-class InvalidAppCommandNotExecutable(errors.SnapcraftError):
+class InvalidAppCommandNotExecutable(snapcraft.errors.SnapcraftError):
 
     fmt = (
         "Failed to generate snap metadata: "
@@ -117,7 +119,7 @@ class InvalidAppCommandNotExecutable(errors.SnapcraftError):
         super().__init__(command=command, app_name=app_name)
 
 
-class InvalidAppCommandFormatError(errors.SnapcraftError):
+class InvalidAppCommandFormatError(snapcraft.errors.SnapcraftError):
 
     fmt = (
         "Failed to generate snap metadata: "
@@ -131,7 +133,7 @@ class InvalidAppCommandFormatError(errors.SnapcraftError):
         super().__init__(command=command, app_name=app_name)
 
 
-class InvalidCommandChainError(errors.SnapcraftError):
+class InvalidCommandChainError(snapcraft.errors.SnapcraftError):
 
     fmt = (
         "Failed to generate snap metadata: "
@@ -144,7 +146,7 @@ class InvalidCommandChainError(errors.SnapcraftError):
         super().__init__(item=item, app_name=app_name)
 
 
-class InvalidDesktopFileError(errors.SnapcraftError):
+class InvalidDesktopFileError(snapcraft.errors.SnapcraftError):
 
     fmt = (
         "Failed to generate desktop file: "
@@ -158,28 +160,28 @@ class InvalidDesktopFileError(errors.SnapcraftError):
         super().__init__(filename=filename, message=message)
 
 
-class SlotValidationError(errors.SnapcraftError):
+class SlotValidationError(snapcraft.errors.SnapcraftError):
     fmt = "failed to validate slot={slot_name}: {message}"
 
     def __init__(self, *, slot_name: str, message: str) -> None:
         super().__init__(slot_name=slot_name, message=message)
 
 
-class PlugValidationError(errors.SnapcraftError):
+class PlugValidationError(snapcraft.errors.SnapcraftError):
     fmt = "failed to validate plug={plug_name}: {message}"
 
     def __init__(self, *, plug_name: str, message: str) -> None:
         super().__init__(plug_name=plug_name, message=message)
 
 
-class HookValidationError(errors.SnapcraftError):
+class HookValidationError(snapcraft.errors.SnapcraftError):
     fmt = "failed to validate hook={hook_name}: {message}"
 
     def __init__(self, *, hook_name: str, message: str) -> None:
         super().__init__(hook_name=hook_name, message=message)
 
 
-class PackageRepositoryValidationError(errors.SnapcraftException):
+class PackageRepositoryValidationError(snapcraft.errors.SnapcraftException):
     def __init__(
         self, *, url: str, brief: str, resolution: Optional[str] = None
     ) -> None:
@@ -200,7 +202,7 @@ class PackageRepositoryValidationError(errors.SnapcraftException):
         return "https://snapcraft.io/docs/package-repositories"
 
 
-class SystemUsernamesValidationError(errors.SnapcraftException):
+class SystemUsernamesValidationError(snapcraft.errors.SnapcraftException):
     def __init__(self, *, name: str, message: str) -> None:
         self._name = name
         self._message = message
@@ -215,7 +217,7 @@ class SystemUsernamesValidationError(errors.SnapcraftException):
         return "https://forum.snapcraft.io/t/system-usernames/13386"
 
 
-class GradeDevelRequiredError(errors.SnapcraftException):
+class GradeDevelRequiredError(snapcraft.errors.SnapcraftException):
     def __init__(self, *, set_grade: str) -> None:
         self.set_grade = set_grade
 

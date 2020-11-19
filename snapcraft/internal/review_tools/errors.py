@@ -16,7 +16,7 @@
 
 from typing import Any, Dict, Optional
 
-from snapcraft.internal.errors import SnapcraftException
+from snapcraft.errors import SnapcraftException
 
 
 class ReviewToolMissing(SnapcraftException):

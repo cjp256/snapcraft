@@ -30,6 +30,8 @@ import shutil
 import subprocess
 from typing import Optional, Tuple
 
+import snapcraft.errors
+import snapcraft.errors.errors
 from snapcraft.internal import errors, sources
 from snapcraft.plugins.v1 import PluginV1
 
@@ -44,7 +46,7 @@ def _get_miniconda_source(version: str) -> Tuple[str, Optional[str]]:
     return source, checksum
 
 
-class MinicondaBadArchitectureError(errors.SnapcraftError):
+class MinicondaBadArchitectureError(snapcraft.errors.SnapcraftError):
 
     fmt = (
         "Failed to fetch miniconda: "

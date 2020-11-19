@@ -13,7 +13,7 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-
+import snapcraft.yaml_utils.errors
 from snapcraft.project import errors
 
 
@@ -35,23 +35,9 @@ class TestErrorFormatting:
         (
             "YamlValidationError",
             {
-                "exception_class": errors.YamlValidationError,
+                "exception_class": snapcraft.yaml_utils.errors.YamlValidationError,
                 "kwargs": {"source": ".snapcraft.yaml", "message": "error"},
                 "expected_message": "Issues while validating .snapcraft.yaml: error",
-            },
-        ),
-        (
-            "DuplicateSnapcraftYamlError",
-            {
-                "exception_class": errors.DuplicateSnapcraftYamlError,
-                "kwargs": {
-                    "snapcraft_yaml_file_path": ".snapcraft.yaml",
-                    "other_snapcraft_yaml_file_path": "snapcraft.yaml",
-                },
-                "expected_message": (
-                    "Found a '.snapcraft.yaml' and a 'snapcraft.yaml'.\n"
-                    "Please remove one and try again."
-                ),
             },
         ),
     ]

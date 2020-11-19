@@ -20,7 +20,6 @@ from datetime import datetime
 from pathlib import Path
 
 from snapcraft.internal.deprecations import handle_deprecation_notice
-from snapcraft.internal.meta.snap import Snap
 from typing import Set
 from ._project_options import ProjectOptions
 from ._project_info import ProjectInfo  # noqa: F401
@@ -63,10 +62,6 @@ class Project(ProjectOptions):
         self.local_plugins_dir = self._get_local_plugins_dir()
         self._start_time = datetime.utcnow()
 
-        # XXX: (Re)set by Config because it mangles source data.
-        # Ideally everywhere wold converge to operating on snap_meta, and ww
-        # would only need to initialize it once (properly).
-        self._snap_meta = Snap()
 
     def _get_build_base(self) -> str:
         """
@@ -80,26 +75,12 @@ class Project(ProjectOptions):
             if self.info.base:
                 return self.info.base
 
-        return self._snap_meta.get_build_base()
+        raise RuntimeError("no base?")
 
     def _get_project_directory_hash(self) -> str:
         m = hashlib.sha1()
         m.update(self._project_dir.encode())
         return m.hexdigest()[:6]
-
-    def _get_content_snaps(self) -> Set[str]:
-        """Return the set of content snaps from snap_meta."""
-        return set(
-            [
-                x.provider
-                for x in self._snap_meta.get_content_plugs()
-                if x.provider is not None
-            ]
-        )
-
-    def _get_provider_content_dirs(self) -> Set[str]:
-        """Return the set installed provider content directories."""
-        return self._snap_meta.get_provider_content_directories()
 
     def _get_snapcraft_assets_dir(self) -> str:
         # Many test cases don't set the yaml file path and assume the default dir

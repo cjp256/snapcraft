@@ -66,6 +66,8 @@ from glob import iglob
 from typing import Any, Dict, List, Optional, Tuple, TYPE_CHECKING
 from pkg_resources import parse_version
 
+import snapcraft.errors
+import snapcraft.errors.errors
 from snapcraft import common
 from snapcraft.internal import elf, errors
 from snapcraft.plugins.v1 import PluginV1
@@ -81,7 +83,7 @@ _GO_MOD_REQUIRED_GO_VERSION = "1.11"
 _GO_MOD_ENV_FLAG_REQUIRED_GO_VERSION = "1.13"
 
 
-class GoModRequiredVersionError(errors.SnapcraftException):
+class GoModRequiredVersionError(snapcraft.errors.SnapcraftException):
     def __init__(self, *, go_version: str) -> None:
         self._go_version = go_version
 

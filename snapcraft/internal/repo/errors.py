@@ -16,7 +16,9 @@
 
 from typing import Sequence
 
-from snapcraft.internal.errors import SnapcraftException
+import snapcraft.errors
+import snapcraft.errors.errors
+from ...errors import SnapcraftException
 from snapcraft.internal.os_release import OsRelease
 from ._platform import _is_deb_based
 from snapcraft.internal import errors
@@ -24,7 +26,7 @@ from snapcraft.internal import errors
 from typing import List, Optional
 
 
-class RepoError(errors.SnapcraftError):
+class RepoError(snapcraft.errors.SnapcraftError):
     pass
 
 

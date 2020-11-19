@@ -61,6 +61,8 @@ from typing import Sequence, Optional
 from urllib.parse import urlparse
 from xml.etree import ElementTree
 
+import snapcraft.errors
+import snapcraft.errors.errors
 from snapcraft import file_utils, formatting_utils
 from snapcraft.internal import errors, sources
 from snapcraft.plugins.v1 import PluginV1
@@ -72,7 +74,7 @@ _DEFAULT_MAVEN_CHECKSUM = "sha512/2a803f578f341e164f6753e410413d16ab60fabe31dc49
 _MAVEN_URL = "https://archive.apache.org/dist/maven/maven-3/{version}/binaries/apache-maven-{version}-bin.tar.gz"
 
 
-class EmptyBuildTargetDirectoryError(errors.SnapcraftException):
+class EmptyBuildTargetDirectoryError(snapcraft.errors.SnapcraftException):
     def __init__(self, target_directory: str) -> None:
         self._target_directory = target_directory
 
@@ -98,7 +100,7 @@ class EmptyBuildTargetDirectoryError(errors.SnapcraftException):
         )
 
 
-class UnsupportedJDKVersionError(errors.SnapcraftError):
+class UnsupportedJDKVersionError(snapcraft.errors.SnapcraftError):
     fmt = (
         "The maven-openjdk-version plugin property was set to {version!r}.\n"
         "Valid values for the {base!r} base are: {valid_versions}."
