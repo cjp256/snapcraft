@@ -26,22 +26,20 @@ from typing import Any, Dict, List, Optional, Sequence, Set
 import jsonschema
 
 from snapcraft import formatting_utils, project, yaml_utils
-from snapcraft.internal import common, deprecations, repo, states, steps
+from snapcraft.internal import common, deprecations, repo
 from snapcraft.internal.meta.application import Application
 from snapcraft.internal.meta.hooks import Hook
 from snapcraft.internal.meta.package_repository import PackageRepository
 from snapcraft.internal.meta.plugs import ContentPlug, Plug
 from snapcraft.internal.meta.slots import ContentSlot, Slot
 from snapcraft.internal.meta.system_user import SystemUser
-from snapcraft.internal.pluginhandler._part_environment import (
-    get_snapcraft_global_environment,
-)
 from snapcraft.project._schema import Validator
 
 from . import errors, grammar, replace_attr
-from ._env import build_env_for_stage, environment_to_replacements, runtime_env
+from ._env import environment_to_replacements
 from ._extensions import apply_extensions
-#from ._grammar_processing._package_transformer import package_transformer
+
+# from ._grammar_processing._package_transformer import package_transformer
 from ._parts_config import PartsConfig
 
 logger = logging.getLogger(__name__)

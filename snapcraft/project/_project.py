@@ -18,17 +18,13 @@ import hashlib
 import os
 from datetime import datetime
 from pathlib import Path
+from typing import Set
 
 from snapcraft.internal import states
 from snapcraft.internal.deprecations import handle_deprecation_notice
-from snapcraft.internal.meta.snap import Snap
-from typing import Set
-from ._project_options import ProjectOptions
+
 from ._project_info import ProjectInfo  # noqa: F401
-from snapcraft.internal.project_loader._env import build_env_for_stage, environment_to_replacements, runtime_env
-from snapcraft.internal.pluginhandler._part_environment import (
-    get_snapcraft_global_environment,
-)
+from ._project_options import ProjectOptions
 
 
 class Project(ProjectOptions):
@@ -68,24 +64,18 @@ class Project(ProjectOptions):
         self.local_plugins_dir = self._get_local_plugins_dir()
         self._start_time = datetime.utcnow()
 
-        # XXX: (Re)set by Config because it mangles source data.
-        # Ideally everywhere wold converge to operating on snap_meta, and ww
-        # would only need to initialize it once (properly).
-        self._snap_meta = Snap()
-
     def _get_build_base(self) -> str:
         """
         Return name for type base or the base otherwise build-base is set
         """
 
-        # In case snap_meta is not yet populated, lookup base in info.
         if self.info:
             if self.info.build_base:
                 return self.info.build_base
             if self.info.base:
                 return self.info.base
 
-        return self._snap_meta.get_build_base()
+        raise RuntimeError("project without info?")
 
     def _get_project_directory_hash(self) -> str:
         m = hashlib.sha1()
@@ -152,48 +142,3 @@ class Project(ProjectOptions):
             state[part.name] = states.get_state(part.part_state_dir, step)
 
         return state
-
-    def stage_env(self):
-        stage_dir = self.stage_dir
-        env = []
-
-        env += runtime_env(stage_dir, self.arch_triplet)
-        env += build_env_for_stage(
-            stage_dir, self.data["name"], self.arch_triplet
-        )
-        for part in self.parts.all_parts:
-            env += part.env(stage_dir)
-
-        return env
-
-    def snap_env(self):
-        prime_dir = self.project.prime_dir
-        env = []
-
-        env += runtime_env(prime_dir, self.arch_triplet)
-        dependency_paths = set()
-        for part in self.parts.all_parts:
-            env += part.env(prime_dir)
-            dependency_paths |= part.get_primed_dependency_paths()
-
-        # Dependency paths are only valid if they actually exist. Sorting them
-        # here as well so the LD_LIBRARY_PATH is consistent between runs.
-        dependency_paths = sorted(
-            {path for path in dependency_paths if os.path.isdir(path)}
-        )
-
-        if dependency_paths:
-            # Add more specific LD_LIBRARY_PATH from the dependencies.
-            env.append(
-                'LD_LIBRARY_PATH="' + ":".join(dependency_paths) + ':$LD_LIBRARY_PATH"'
-            )
-
-        return env
-
-    def project_env(self):
-        return [
-            '{}="{}"'.format(variable, value)
-            for variable, value in get_snapcraft_global_environment(
-                self
-            ).items()
-        ]

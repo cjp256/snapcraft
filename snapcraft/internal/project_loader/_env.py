@@ -14,10 +14,13 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import os
 from typing import Dict, List
 
 from snapcraft import formatting_utils
 from snapcraft.internal import common, elf
+
+from ._parts_config import PartsConfig
 
 
 def runtime_env(root: str, arch_triplet: str) -> List[str]:
@@ -98,3 +101,27 @@ def environment_to_replacements(environment: Dict[str, str]) -> Dict[str, str]:
         replacements["${{{}}}".format(variable)] = value
 
     return replacements
+
+
+def snap_env(prime_dir: str, arch_triplet: str, parts_config: PartsConfig):
+    env = []
+
+    env += runtime_env(prime_dir, arch_triplet)
+    dependency_paths = set()
+    for part in parts_config.all_parts:
+        env += part.env(prime_dir)
+        dependency_paths |= part.get_primed_dependency_paths()
+
+    # Dependency paths are only valid if they actually exist. Sorting them
+    # here as well so the LD_LIBRARY_PATH is consistent between runs.
+    dependency_paths = sorted(
+        {path for path in dependency_paths if os.path.isdir(path)}
+    )
+
+    if dependency_paths:
+        # Add more specific LD_LIBRARY_PATH from the dependencies.
+        env.append(
+            'LD_LIBRARY_PATH="' + ":".join(dependency_paths) + ':$LD_LIBRARY_PATH"'
+        )
+
+    return env

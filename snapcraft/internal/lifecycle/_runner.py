@@ -29,6 +29,7 @@ from snapcraft.internal import (
 )
 from snapcraft.internal.meta._snap_packaging import create_snap_packaging
 from snapcraft.internal.pluginhandler._part_environment import (
+    get_snapcraft_global_environment,
     get_snapcraft_part_directory_environment,
 )
 from snapcraft.internal.project_loader._config import Config
@@ -397,9 +398,16 @@ class _Executor:
             notify_part_progress(part, "Preparing to {}".format(step.name), debug=True)
             preparation_function()
 
+        project_env = [
+            '{}="{}"'.format(variable, value)
+            for variable, value in get_snapcraft_global_environment(
+                self.project
+            ).items()
+        ]
+
         if isinstance(part.plugin, plugins.v1.PluginV1):
             common.env = self.parts_config.build_env_for_part(part)
-            common.env.extend(self.config.project_env())
+            common.env.extend(project_env)
 
         part = _replace_in_part(part)
 
