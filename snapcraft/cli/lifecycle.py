@@ -18,6 +18,7 @@ import itertools
 import logging
 import os
 import pathlib
+import platform
 import subprocess
 import sys
 import time
@@ -26,18 +27,12 @@ from typing import List, Optional, Union
 
 import click
 import progressbar
+from xcraft.providers.lxd import LXDProvider
 
 from snapcraft import file_utils
-from snapcraft.internal import (
-    build_providers,
-    deprecations,
-    errors,
-    indicators,
-    lifecycle,
-    project_loader,
-    steps,
-)
+from snapcraft.internal import deprecations, indicators, lifecycle
 from snapcraft.project._sanity_checks import conduct_project_sanity_check
+from snapcraft.providers.executed import SnapcraftExecutedProvider
 
 from . import echo
 from ._command import SnapcraftProjectCommand
@@ -50,32 +45,41 @@ from ._options import (
     get_project,
 )
 
-logger = logging.getLogger(__name__)
-
-
 if typing.TYPE_CHECKING:
     from snapcraft.internal.project import Project  # noqa: F401
 
 
-# TODO: when snap is a real step we can simplify the arguments here.
-def _execute(  # noqa: C901
-    step: steps.Step,
-    parts: str,
-    pack_project: bool = False,
-    output: Optional[str] = None,
-    shell: bool = False,
-    shell_after: bool = False,
-    setup_prime_try: bool = False,
-    **kwargs,
-) -> "Project":
-    # Cleanup any previous errors.
-    _clean_provider_error()
+logger = logging.getLogger(__name__)
 
+
+def _get_primary_mirror() -> str:
+    primary_mirror = os.getenv("SNAPCRAFT_APT_PRIMARY_MIRROR", None)
+
+    if primary_mirror is None:
+        if platform.machine() in ["AMD64", "i686", "x86_64"]:
+            primary_mirror = "http://archive.ubuntu.com/ubuntu"
+        else:
+            primary_mirror = "http://ports.ubuntu.com/ubuntu-ports"
+
+    return primary_mirror
+
+
+def _get_security_mirror() -> str:
+    security_mirror = os.getenv("SNAPCRAFT_APT_SECURITY_MIRROR", None)
+
+    if security_mirror is None:
+        if platform.machine() in ["AMD64", "i686", "x86_64"]:
+            security_mirror = "http://security.ubuntu.com/ubuntu"
+        else:
+            security_mirror = "http://ports.ubuntu.com/ubuntu-ports"
+
+    return security_mirror
+
+
+def provide(*, skip_setup: bool = False, **kwargs):
     build_provider = get_build_provider(**kwargs)
     build_provider_flags = get_build_provider_flags(build_provider, **kwargs)
     apply_host_provider_flags(build_provider_flags)
-
-    is_managed_host = build_provider == "managed-host"
 
     # Temporary fix to ignore target_arch.
     if kwargs.get("target_arch") is not None and build_provider in ["multipass", "lxd"]:
@@ -84,73 +88,33 @@ def _execute(  # noqa: C901
         )
         kwargs.pop("target_arch")
 
-    project = get_project(is_managed_host=is_managed_host, **kwargs)
+    project = get_project(is_managed_host=False, **kwargs)
     conduct_project_sanity_check(project, **kwargs)
 
-    if build_provider in ["host", "managed-host"]:
-        project_config = project_loader.load_config(project)
-        lifecycle.execute(step, project_config, parts)
-        if pack_project:
-            _pack(
-                project.prime_dir,
-                compression=project._snap_meta.compression,
-                output=output,
-            )
-    else:
-        build_provider_class = build_providers.get_provider_for(build_provider)
-        try:
-            build_provider_class.ensure_provider()
-        except build_providers.errors.ProviderNotFound as provider_error:
-            if provider_error.prompt_installable:
-                if echo.is_tty_connected() and echo.confirm(
-                    "Support for {!r} needs to be set up. "
-                    "Would you like to do it now?".format(provider_error.provider)
-                ):
-                    build_provider_class.setup_provider(echoer=echo)
-                else:
-                    raise provider_error
-            else:
-                raise provider_error
+    instance_name = f"snapcraft-{project.info.name}"
+    run_environment = {
+        "PATH": "/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    }
 
-        with build_provider_class(
-            project=project, echoer=echo, build_provider_flags=build_provider_flags
-        ) as instance:
-            instance.mount_project()
-            try:
-                if shell:
-                    # shell means we want to do everything right up to the previous
-                    # step and then go into a shell instead of the requested step.
-                    # the "snap" target is a special snowflake that has not made its
-                    # way to be a proper step.
-                    previous_step = None
-                    if pack_project:
-                        previous_step = steps.PRIME
-                    elif step > steps.PULL:
-                        previous_step = step.previous_step()
-                    # steps.PULL is the first step, so we would directly shell into it.
-                    if previous_step:
-                        instance.execute_step(previous_step)
-                elif pack_project:
-                    instance.pack_project(output=output)
-                elif setup_prime_try:
-                    instance.expose_prime()
-                    instance.execute_step(step)
-                else:
-                    instance.execute_step(step)
-            except Exception:
-                _retrieve_provider_error(instance)
-                if project.debug:
-                    instance.shell()
-                else:
-                    echo.warning(
-                        "Run the same command again with --debug to shell into the environment "
-                        "if you wish to introspect this failure."
-                    )
-                    raise
-            else:
-                if shell or shell_after:
-                    instance.shell()
-    return project
+    env_provider = LXDProvider(
+        instance_name=instance_name, default_run_environment=run_environment
+    )
+
+    if not skip_setup:
+        env_provider.setup()
+
+    return SnapcraftExecutedProvider(
+        env_provider=env_provider,
+        host_artifacts_dir=pathlib.Path(kwargs.get("output", ".")).resolve(),
+        host_project_dir=pathlib.Path(".").resolve(),
+        install_apt_primary_mirror=_get_primary_mirror(),
+        install_base=project._get_build_base(),
+        install_certs=build_provider_flags.get("SNAPCRAFT_ADD_CA_CERTIFICATES", None),
+        install_http_proxy=build_provider_flags.get("http_proxy", None),
+        install_https_proxy=build_provider_flags.get("https_proxy", None),
+        user_debug=kwargs.get("debug", False),
+        user_shell=kwargs.get("shell", False),
+    )
 
 
 def _run_pack(snap_command: List[Union[str, pathlib.Path]]) -> str:
@@ -295,7 +259,10 @@ def pull(ctx, parts, **kwargs):
         snapcraft pull my-part1 my-part2
 
     """
-    _execute(steps.PULL, parts, **kwargs)
+    with provide(**kwargs) as provider:
+        rc = provider.pull(parts=parts)
+
+    sys.exit(rc)
 
 
 @lifecyclecli.command(cls=SnapcraftProjectCommand)
@@ -310,7 +277,10 @@ def build(parts, **kwargs):
         snapcraft build my-part1 my-part2
 
     """
-    _execute(steps.BUILD, parts, **kwargs)
+    with provide(**kwargs) as provider:
+        rc = provider.build(parts=parts)
+
+    sys.exit(rc)
 
 
 @lifecyclecli.command(cls=SnapcraftProjectCommand)
@@ -325,7 +295,10 @@ def stage(parts, **kwargs):
         snapcraft stage my-part1 my-part2
 
     """
-    _execute(steps.STAGE, parts, **kwargs)
+    with provide(**kwargs) as provider:
+        rc = provider.stage(parts=parts)
+
+    sys.exit(rc)
 
 
 @lifecyclecli.command(cls=SnapcraftProjectCommand)
@@ -340,7 +313,10 @@ def prime(parts, **kwargs):
         snapcraft prime my-part1 my-part2
 
     """
-    _execute(steps.PRIME, parts, **kwargs)
+    with provide(**kwargs) as provider:
+        rc = provider.prime()
+
+    sys.exit(rc)
 
 
 @lifecyclecli.command("try")
@@ -355,9 +331,14 @@ def try_command(**kwargs):
         snapcraft try
 
     """
-    project = _execute(steps.PRIME, [], setup_prime_try=True, **kwargs)
-    # project.prime_dir here points to the on-host prime directory.
-    echo.info("You can now run `snap try {}`.".format(project.prime_dir))
+    with provide(**kwargs) as provider:
+        # TODO: prime is now always available.
+        rc = provider.prime()
+
+    if rc == 0:
+        echo.info("You can now run `snap try prime`.")
+
+    sys.exit(rc)
 
 
 @lifecyclecli.command(cls=SnapcraftProjectCommand)
@@ -379,7 +360,10 @@ def snap(directory, output, **kwargs):
         deprecations.handle_deprecation_notice("dn6")
         _pack(directory, output=output)
     else:
-        _execute(steps.PRIME, parts=tuple(), pack_project=True, output=output, **kwargs)
+        with provide(**kwargs) as provider:
+            rc = provider.snap()
+
+        sys.exit(rc)
 
 
 @lifecyclecli.command(cls=SnapcraftProjectCommand)
@@ -419,40 +403,8 @@ def clean(ctx, parts, unprime, step, **kwargs):
         option = "--step" if "--step" in ctx.obj["argv"] else "-s"
         raise click.BadOptionUsage(option, "no such option: {}".format(option))
 
-    build_provider = get_build_provider(**kwargs)
-    build_provider_flags = get_build_provider_flags(build_provider, **kwargs)
-    apply_host_provider_flags(build_provider_flags)
-
-    is_managed_host = build_provider == "managed-host"
-
-    # Temporary fix to ignore target_arch, silently for clean.
-    if "target_arch" in kwargs and build_provider in ["multipass", "lxd"]:
-        kwargs.pop("target_arch")
-
-    try:
-        project = get_project(is_managed_host=is_managed_host)
-    except errors.ProjectNotFoundError:
-        # Fresh environment, nothing to clean.
-        return
-
-    if unprime and not is_managed_host:
-        raise click.BadOptionUsage("--unprime", "no such option: --unprime")
-
-    if build_provider in ["host", "managed-host"]:
-        step = steps.PRIME if unprime else None
-        lifecycle.clean(project, parts, step)
-    else:
-        build_provider_class = build_providers.get_provider_for(build_provider)
-        if parts:
-            with build_provider_class(
-                project=project, echoer=echo, build_provider_flags=build_provider_flags
-            ) as instance:
-                instance.clean(part_names=parts)
-        else:
-            build_provider_class(project=project, echoer=echo).clean_project()
-            # Clear the prime directory on the host, unless on Windows.
-            if sys.platform != "win32":
-                lifecycle.clean(project, parts, steps.PRIME)
+    provider = provide(skip_setup=True, **kwargs)
+    provider.clean()
 
 
 if __name__ == "__main__":

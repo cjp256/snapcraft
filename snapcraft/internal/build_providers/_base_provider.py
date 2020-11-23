@@ -81,6 +81,7 @@ class Provider(abc.ABC):
         if build_provider_flags is None:
             build_provider_flags = dict()
         self.build_provider_flags = build_provider_flags.copy()
+        assert False
 
     def __enter__(self):
         try:
