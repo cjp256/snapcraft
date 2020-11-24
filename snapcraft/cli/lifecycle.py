@@ -76,6 +76,23 @@ def _get_security_mirror() -> str:
     return security_mirror
 
 
+def provide_lxd(*, base: str, project_name: str, default_run_environment: dict):
+    image_name = dict(
+        core="16.04", core18="18.04", core20="20.04", core22="22.04",
+    ).get(base)
+
+    if image_name is None:
+        raise click.ClickException(f"LXD provider does not support base {base!r}.")
+
+    instance_name = f"snapcraft-{project_name}"
+
+    return LXDProvider(
+        instance_name=instance_name,
+        default_run_environment=default_run_environment,
+        image_name=image_name,
+    )
+
+
 def provide(*, skip_setup: bool = False, **kwargs):
     build_provider = get_build_provider(**kwargs)
     build_provider_flags = get_build_provider_flags(build_provider, **kwargs)
@@ -91,19 +108,23 @@ def provide(*, skip_setup: bool = False, **kwargs):
     project = get_project(is_managed_host=False, **kwargs)
     conduct_project_sanity_check(project, **kwargs)
 
-    instance_name = f"snapcraft-{project.info.name}"
-    run_environment = {
-        "PATH": "/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-    }
-
-    env_provider = LXDProvider(
-        instance_name=instance_name, default_run_environment=run_environment
+    default_run_environment = dict(
+        PATH="/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        SNAPCRAFT_BUILD_ENVIRONMENT="host",
     )
+
+    if build_provider == "lxd":
+        env_provider = provide_lxd(
+            base=project._get_build_base(),
+            project_name=project.info.name,
+            default_run_environment=default_run_environment,
+        )
 
     if not skip_setup:
         env_provider.setup()
 
     return SnapcraftExecutedProvider(
+        default_run_environment=default_run_environment,
         env_provider=env_provider,
         host_artifacts_dir=pathlib.Path(kwargs.get("output", ".")).resolve(),
         host_project_dir=pathlib.Path(".").resolve(),
@@ -404,7 +425,7 @@ def clean(ctx, parts, unprime, step, **kwargs):
         raise click.BadOptionUsage(option, "no such option: {}".format(option))
 
     provider = provide(skip_setup=True, **kwargs)
-    provider.clean()
+    provider.clean(parts=parts)
 
 
 if __name__ == "__main__":

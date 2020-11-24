@@ -17,6 +17,7 @@ class SnapcraftExecutedProvider:
         *,
         bind_mount_project: bool = True,
         bind_mount_ssh: bool = False,
+        default_run_environment: Dict[str, str],
         env_provider: ExecutedProvider,
         env_artifacts_dir: pathlib.Path = pathlib.Path("/root/snapcraft-artifacts"),
         env_project_dir: pathlib.Path = pathlib.Path("/root/snapcraft-project"),
@@ -27,12 +28,12 @@ class SnapcraftExecutedProvider:
         install_certs: Optional[pathlib.Path],
         install_http_proxy: Optional[str],
         install_https_proxy: Optional[str],
-        run_environment: Dict[str, str] = None,
         user_debug: bool = False,
         user_shell: bool = False,
     ) -> None:
         self.bind_mount_project = bind_mount_project
         self.bind_mount_ssh = bind_mount_ssh
+        self.default_run_environment = default_run_environment
         self.env_provider = env_provider
         self.env_artifacts_dir = env_artifacts_dir
         self.env_project_dir = env_project_dir
@@ -43,22 +44,6 @@ class SnapcraftExecutedProvider:
         self.install_certs = install_certs
         self.install_http_proxy = install_http_proxy
         self.install_https_proxy = install_https_proxy
-
-        if run_environment is not None:
-            self.run_environment = run_environment.copy()
-        else:
-            self.run_environment = {
-                "SNAPCRAFT_BUILD_ENVIRONMENT": "host",
-                "PATH": "/snap/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-            }
-
-        self.install_os_release = {
-            "core": "xenial",
-            "core16": "xenial",
-            "core18": "bionic",
-            "core20": "focal",
-        }[self.install_base]
-
         self.user_debug = user_debug
         self.user_shell = user_shell
 
@@ -66,24 +51,25 @@ class SnapcraftExecutedProvider:
         """Run build phase."""
         return self._run_lifecycle_command(["snapcraft", "build", *parts])
 
-    def clean(self) -> None:
-        """Clean all artifacts of project and build environment.
+    def clean(self, *, parts: List[str]) -> int:
+        """Clean artifacts of project and build environment.
 
-        Purges all artifacts from using the provider to build the
-        project.  This includes build-instances (containers/VMs) and
-        associated metadata and records.
+        If no parts are specified, purges all project artifacts,
+        including build-instances and associated metadata.
+
+        If parts are specified, cleans associated parts.
 
         This does not include any artifacts that have resulted from
         a call to snap(), i.e. snap files or build logs.
         """
-        self.env_provider.clean()
+        if not self.env_provider.executor.exists():
+            return 0
 
-    def clean_parts(self, *, parts: List[str]) -> int:
-        """Clean specified parts.
+        if parts:
+            return self._run(["snapcraft", "clean", *parts])
 
-        :param parts: List of parts to clean.
-        """
-        return self._run(["snapcraft", "clean", *parts])
+        self.env_provider.teardown(clean=True)
+        return 0
 
     def __enter__(self) -> "SnapcraftExecutedProvider":
         self.setup()
@@ -106,7 +92,7 @@ class SnapcraftExecutedProvider:
         if "env" in kwargs:
             env = kwargs.pop("env")
         else:
-            env = self.run_environment
+            env = self.default_run_environment
 
         if "cwd" in kwargs:
             cwd = kwargs.pop("cwd")
